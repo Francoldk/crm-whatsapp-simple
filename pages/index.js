@@ -22,8 +22,20 @@ export default function KanbanCRM() {
   const [newPhone, setNewPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // 1. Cargar contactos
   useEffect(() => {
     fetchContacts();
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => {
+        fetchContacts();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchContacts = async () => {
@@ -33,22 +45,62 @@ export default function KanbanCRM() {
         .select('*')
         .order('updated_at', { ascending: false });
 
-      if (error) {
-        console.error('Error cargando contactos:', error);
-      } else if (data) {
-        setContacts(data);
-      }
+      if (!error && data) setContacts(data);
     } catch (err) {
       console.error(err);
     }
   };
 
+  // 2. Cargar mensajes del chat seleccionado
+  useEffect(() => {
+    if (!activeChat) return;
+
+    fetchMessages(activeChat.id);
+
+    const msgChannel = supabase
+      .channel(`chat-${activeChat.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `contact_id=eq.${activeChat.id}`
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(msgChannel);
+    };
+  }, [activeChat]);
+
+  const fetchMessages = async (contactId) => {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: true });
+
+    if (data) setMessages(data);
+  };
+
+  // 3. Mover contacto de columna
+  const moveContact = async (contactId, newStatus) => {
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, status: newStatus } : c));
+    if (activeChat && activeChat.id === contactId) {
+      setActiveChat(prev => ({ ...prev, status: newStatus }));
+    }
+
+    await supabase
+      .from('contacts')
+      .update({ status: newStatus })
+      .eq('id', contactId);
+  };
+
+  // 4. Crear contacto manual
   const handleCreateContact = async (e) => {
     e.preventDefault();
-    if (!newPhone.trim()) {
-      alert('Ingresá un número de teléfono');
-      return;
-    }
+    if (!newPhone.trim()) return;
 
     setLoading(true);
     try {
@@ -62,34 +114,45 @@ export default function KanbanCRM() {
       const { data, error } = await supabase
         .from('contacts')
         .insert([payload])
-        .select();
+        .select()
+        .single();
 
-      if (error) {
-        alert('Error Supabase: ' + error.message);
-        console.error(error);
-      } else {
+      if (!error && data) {
         setShowNewContactModal(false);
         setNewName('');
         setNewPhone('');
         fetchContacts();
+        setActiveChat(data);
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const moveContact = async (contactId, newStatus) => {
-    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, status: newStatus } : c));
-    if (activeChat && activeChat.id === contactId) {
-      setActiveChat(prev => ({ ...prev, status: newStatus }));
-    }
+  // 5. Enviar mensaje en el chat
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMsgText.trim() || !activeChat) return;
 
-    await supabase
-      .from('contacts')
-      .update({ status: newStatus })
-      .eq('id', contactId);
+    const textToSend = newMsgText;
+    setNewMsgText('');
+
+    // Guardar en Supabase
+    await supabase.from('messages').insert([{
+      contact_id: activeChat.id,
+      sender: 'me',
+      text: textToSend
+    }]);
+
+    // Actualizar última actividad del contacto
+    await supabase.from('contacts').update({
+      last_message: textToSend,
+      updated_at: new Date().toISOString()
+    }).eq('id', activeChat.id);
+
+    // Acá conectaremos la llamada a la API de WhatsApp para que salga al celular real
   };
 
   const filteredContacts = contacts.filter(c => 
@@ -146,6 +209,7 @@ export default function KanbanCRM() {
         })}
       </div>
 
+      {/* Modal Nuevo Contacto */}
       {showNewContactModal && (
         <div className="chat-modal-backdrop" onClick={() => setShowNewContactModal(false)}>
           <div className="chat-modal" style={{ height: 'auto', padding: '20px' }} onClick={e => e.stopPropagation()}>
@@ -172,6 +236,59 @@ export default function KanbanCRM() {
                   {loading ? 'Guardando...' : 'Crear Contacto'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Chat Interactivo */}
+      {activeChat && (
+        <div className="chat-modal-backdrop" onClick={() => setActiveChat(null)}>
+          <div className="chat-modal" onClick={e => e.stopPropagation()}>
+            <div className="chat-modal-header">
+              <div>
+                <h3>{activeChat.name}</h3>
+                <small>{activeChat.phone}</small>
+              </div>
+              <div className="chat-header-actions">
+                <select 
+                  value={activeChat.status} 
+                  onChange={(e) => moveContact(activeChat.id, e.target.value)}
+                  className="status-dropdown"
+                >
+                  {COLUMNS.map(col => (
+                    <option key={col.id} value={col.id}>{col.label}</option>
+                  ))}
+                </select>
+                <button className="close-btn" onClick={() => setActiveChat(null)}>✕</button>
+              </div>
+            </div>
+
+            <div className="chat-modal-messages">
+              {messages.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#666', marginTop: '20px' }}>
+                  No hay mensajes aún en esta conversación
+                </div>
+              ) : (
+                messages.map((m) => (
+                  <div key={m.id || m.created_at} className={`msg-bubble ${m.sender}`}>
+                    <p>{m.text}</p>
+                    <span className="msg-time">
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <form onSubmit={handleSendMessage} className="chat-modal-footer">
+              <input 
+                type="text" 
+                placeholder="Escribe un mensaje de WhatsApp..."
+                value={newMsgText}
+                onChange={(e) => setNewMsgText(e.target.value)}
+              />
+              <button type="submit">Enviar</button>
             </form>
           </div>
         </div>
