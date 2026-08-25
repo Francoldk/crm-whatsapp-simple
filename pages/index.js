@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 const COLUMNS = [
@@ -16,11 +16,13 @@ export default function KanbanCRM() {
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMsgText, setNewMsgText] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewContactModal, setShowNewContactModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef(null);
 
   // 1. Cargar contactos
   useEffect(() => {
@@ -51,7 +53,7 @@ export default function KanbanCRM() {
     }
   };
 
-  // 2. Cargar mensajes del chat seleccionado
+  // 2. Cargar mensajes del chat activo
   useEffect(() => {
     if (!activeChat) return;
 
@@ -84,7 +86,7 @@ export default function KanbanCRM() {
     if (data) setMessages(data);
   };
 
-  // 3. Mover contacto de columna
+  // 3. Mover estado en el embudo
   const moveContact = async (contactId, newStatus) => {
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, status: newStatus } : c));
     if (activeChat && activeChat.id === contactId) {
@@ -131,39 +133,63 @@ export default function KanbanCRM() {
     }
   };
 
-  // 5. Enviar mensaje en el chat y despachar a WhatsApp real
+  // 5. Enviar mensaje (texto y/o imagen)
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMsgText.trim() || !activeChat) return;
+    if ((!newMsgText.trim() && !selectedFile) || !activeChat) return;
 
+    let imageUrl = null;
     const textToSend = newMsgText;
+    const fileToSend = selectedFile;
+
+    // Limpiar campos visuales de inmediato
     setNewMsgText('');
+    setSelectedFile(null);
 
     try {
-      // 1. Guardar en Supabase
+      // Subir archivo al bucket de Supabase si existe
+      if (fileToSend) {
+        const fileExt = fileToSend.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('chat-attachments')
+          .upload(fileName, fileToSend);
+
+        if (!uploadError) {
+          const { data } = supabase.storage.from('chat-attachments').getPublicUrl(fileName);
+          imageUrl = data.publicUrl;
+        } else {
+          console.error('Error subiendo imagen a Supabase Storage:', uploadError);
+        }
+      }
+
+      const storedText = imageUrl ? `${imageUrl} ${textToSend}`.trim() : textToSend;
+
+      // Guardar mensaje en base de datos
       await supabase.from('messages').insert([{
         contact_id: activeChat.id,
         sender: 'me',
-        text: textToSend
+        text: storedText
       }]);
 
-      // 2. Actualizar última actividad del contacto
+      // Actualizar tarjeta del contacto
       await supabase.from('contacts').update({
-        last_message: textToSend,
+        last_message: imageUrl ? '📷 Imagen enviada' : textToSend,
         updated_at: new Date().toISOString()
       }).eq('id', activeChat.id);
 
-      // 3. Despachar a tu servidor de WhatsApp en Render
+      // Despachar a WhatsApp real mediante Render
       await fetch('https://whatsapp-server-qr.onrender.com/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: activeChat.phone,
-          message: textToSend
+          message: textToSend,
+          imageUrl: imageUrl
         })
       });
     } catch (error) {
-      console.error('Error enviando mensaje:', error);
+      console.error('Error al enviar el mensaje:', error);
     }
   };
 
@@ -282,18 +308,85 @@ export default function KanbanCRM() {
                   No hay mensajes aún en esta conversación
                 </div>
               ) : (
-                messages.map((m) => (
-                  <div key={m.id || m.created_at} className={`msg-bubble ${m.sender}`}>
-                    <p>{m.text}</p>
-                    <span className="msg-time">
-                      {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                ))
+                messages.map((m) => {
+                  const isImage = m.text && m.text.startsWith('http') && (
+                    m.text.includes('.jpg') || 
+                    m.text.includes('.png') || 
+                    m.text.includes('.jpeg') || 
+                    m.text.includes('.webp') ||
+                    m.text.includes('chat-attachments')
+                  );
+
+                  return (
+                    <div key={m.id || m.created_at} className={`msg-bubble ${m.sender}`}>
+                      {isImage ? (
+                        <div>
+                          <img 
+                            src={m.text.split(' ')[0]} 
+                            alt="Adjunto" 
+                            style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', marginBottom: '4px', display: 'block' }} 
+                          />
+                          {m.text.split(' ').slice(1).join(' ') && (
+                            <p>{m.text.split(' ').slice(1).join(' ')}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p>{m.text}</p>
+                      )}
+                      <span className="msg-time">
+                        {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  );
+                })
               )}
             </div>
 
+            {/* Vista previa si hay un archivo seleccionado */}
+            {selectedFile && (
+              <div style={{ padding: '8px 16px', background: '#1e222d', color: '#ff9800', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #3b4252' }}>
+                <span>📎 Adjunto listo: <strong>{selectedFile.name}</strong></span>
+                <button 
+                  type="button" 
+                  onClick={() => setSelectedFile(null)} 
+                  style={{ background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleSendMessage} className="chat-modal-footer">
+              <input 
+                type="file" 
+                accept="image/*" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setSelectedFile(e.target.files[0]);
+                  }
+                }} 
+              />
+              <button 
+                type="button" 
+                onClick={() => fileInputRef.current?.click()} 
+                style={{ 
+                  background: '#2e3440', 
+                  border: '1px solid #434c5e', 
+                  color: '#eceff4',
+                  padding: '0 14px', 
+                  borderRadius: '6px', 
+                  cursor: 'pointer', 
+                  fontSize: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Adjuntar imagen"
+              >
+                📎
+              </button>
               <input 
                 type="text" 
                 placeholder="Escribe un mensaje de WhatsApp..."
