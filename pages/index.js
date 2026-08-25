@@ -131,7 +131,7 @@ export default function KanbanCRM() {
     }
   };
 
-  // 5. Enviar mensaje en el chat
+  // 5. Enviar mensaje en el chat y despachar a WhatsApp real
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMsgText.trim() || !activeChat) return;
@@ -139,20 +139,32 @@ export default function KanbanCRM() {
     const textToSend = newMsgText;
     setNewMsgText('');
 
-    // Guardar en Supabase
-    await supabase.from('messages').insert([{
-      contact_id: activeChat.id,
-      sender: 'me',
-      text: textToSend
-    }]);
+    try {
+      // 1. Guardar en Supabase
+      await supabase.from('messages').insert([{
+        contact_id: activeChat.id,
+        sender: 'me',
+        text: textToSend
+      }]);
 
-    // Actualizar última actividad del contacto
-    await supabase.from('contacts').update({
-      last_message: textToSend,
-      updated_at: new Date().toISOString()
-    }).eq('id', activeChat.id);
+      // 2. Actualizar última actividad del contacto
+      await supabase.from('contacts').update({
+        last_message: textToSend,
+        updated_at: new Date().toISOString()
+      }).eq('id', activeChat.id);
 
-    // Acá conectaremos la llamada a la API de WhatsApp para que salga al celular real
+      // 3. Despachar a tu servidor de WhatsApp en Render
+      await fetch('https://whatsapp-server-qr.onrender.com/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: activeChat.phone,
+          message: textToSend
+        })
+      });
+    } catch (error) {
+      console.error('Error enviando mensaje:', error);
+    }
   };
 
   const filteredContacts = contacts.filter(c => 
