@@ -20,7 +20,7 @@ Tu objetivo es responder por WhatsApp de forma ultra concisa, ágil y directa.
 REGLAS DE INTERACCIÓN:
 1. MENSAJES CORTOS: Máximo 2 a 3 oraciones en charlas generales. Cero rodeos ni párrafos largos.
 2. DATOS INCOMPLETOS: Si el cliente pasa kilos o valor pero NO dice qué producto es, preguntá DIRECTO qué mercadería es para revisar la posición arancelaria y calcular impuestos exactos.
-3. FORMATO ESTRICTO DE COTIZACIÓN (Usar únicamente cuando se cuente con producto, valor/kilos aproximados):
+3. FORMATO ESTRICTO DE COTIZACIÓN (Usar únicamente cuando se cuente con producto, valor y kilos aproximados):
 
 ━━━━━━━━━━━━━━━
 📦 COTIZACIÓN — Aéreo Courier
@@ -67,7 +67,7 @@ Incluye coordinación con proveedor, consolidación, flete, firma importadora y 
 HISTORIAL:
 ${JSON.stringify(conversationHistory || [])}
 
-RESPONDÉ ESTRICTAMENTE UN JSON VÁLIDO (sin markdown \`\`\`json):
+RESPONDÉ ESTRICTAMENTE UN JSON VÁLIDO (sin bloques markdown \`\`\`json):
 {
   "replyMessage": "Texto exacto a enviar por WhatsApp al cliente",
   "suggestedStatus": "Nuevo Lead" | "Cotización Pendiente" | "Cotizado" | "Esperando Pago" | "Cerrado",
