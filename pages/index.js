@@ -109,7 +109,7 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Disparador de Sol AI
+  // Disparador de Sol AI con informe técnico detallado de error
   const handleTriggerSolAI = async () => {
     setLoadingAi(true);
     try {
@@ -119,10 +119,9 @@ export default function ModuloVentasCRM() {
         body: JSON.stringify({ conversationHistory: selectedConv.messages })
       });
 
-      if (!res.ok) throw new Error('Error al conectar con Sol AI');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error desconocido al invocar a Sol');
 
-      // 1. Rellenar formulario con datos extraídos
       if (data.extractedData) {
         const mergedData = {
           ...formData,
@@ -136,18 +135,16 @@ export default function ModuloVentasCRM() {
         );
       }
 
-      // 2. Cargar respuesta orientada al cierre en el input
       if (data.replyMessage) {
         setInputReply(data.replyMessage);
       }
 
-      // 3. Sugerir cambio de estado si corresponde
       if (data.suggestedStatus) {
         handleStatusChange(data.suggestedStatus);
       }
     } catch (err) {
       console.error(err);
-      alert('Hubo un problema al procesar con Sol. Verificá tu GEMINI_API_KEY.');
+      alert('Detalle del error: ' + err.message);
     } finally {
       setLoadingAi(false);
     }
@@ -287,7 +284,7 @@ export default function ModuloVentasCRM() {
 
       {activeTab === 'inbox' && (
         <main style={styles.mainGrid}>
-          {/* COLUMNA 1 */}
+          {/* COLUMNA 1: CHATS */}
           <aside style={styles.colInbox}>
             <div style={styles.inboxHeader}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -377,7 +374,7 @@ export default function ModuloVentasCRM() {
             </div>
           </aside>
 
-          {/* COLUMNA 2 */}
+          {/* COLUMNA 2: CHAT ACTIVO */}
           <section style={styles.colChat}>
             <div style={styles.chatWindowHeader}>
               <div>
@@ -419,7 +416,7 @@ export default function ModuloVentasCRM() {
             </form>
           </section>
 
-          {/* COLUMNA 3 */}
+          {/* COLUMNA 3: FORMULARIO */}
           <aside style={styles.colForm}>
             <div style={styles.formHeader}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
