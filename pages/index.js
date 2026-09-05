@@ -1,11 +1,9 @@
-'use client';
-
 import { useState } from 'react';
 
 export default function ModuloVentasCRM() {
   const [activeTab, setActiveTab] = useState('inbox'); // 'inbox' | 'estados'
 
-  // Lista mockeada de conversaciones activas
+  // Lista de conversaciones activas del CRM
   const [conversations, setConversations] = useState([
     {
       id: 1,
@@ -83,18 +81,18 @@ export default function ModuloVentasCRM() {
   const [selectedId, setSelectedId] = useState(1);
   const selectedConv = conversations.find((c) => c.id === selectedId) || conversations[0];
 
-  // Estado del formulario de precotización vinculado a la conversación activa
+  // Estado del formulario de precotización vinculado al chat seleccionado
   const [formData, setFormData] = useState(selectedConv?.quoteData);
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
 
-  // Al cambiar de conversación en el panel izquierdo
+  // Seleccionar conversación
   const handleSelectConversation = (conv) => {
     setSelectedId(conv.id);
     setFormData(conv.quoteData);
   };
 
-  // Actualizar campos del formulario
+  // Modificar formulario
   const handleFormChange = (field, value) => {
     const updated = { ...formData, [field]: value };
     setFormData(updated);
@@ -103,14 +101,14 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Modificar estado manualmente
+  // Modificar estado del lead
   const handleStatusChange = (newStatus) => {
     setConversations((prev) =>
       prev.map((c) => (c.id === selectedId ? { ...c, status: newStatus } : c))
     );
   };
 
-  // Envío manual de respuesta
+  // Enviar mensaje en el chat
   const handleSendReply = (e) => {
     e.preventDefault();
     if (!inputReply.trim()) return;
@@ -148,7 +146,7 @@ export default function ModuloVentasCRM() {
 
   return (
     <div style={styles.container}>
-      {/* BARRA SUPERIOR CORPORATIVA */}
+      {/* BARRA SUPERIOR CON IDENTIDAD DCAM */}
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
           <img src="/logo.png" alt="De China Al Mundo" style={styles.logoImg} />
@@ -159,14 +157,14 @@ export default function ModuloVentasCRM() {
           </div>
         </div>
 
-        {/* SELECTOR DE SOLAPAS / PESTAÑAS */}
+        {/* NAVEGACIÓN ENTRE SOLAPAS */}
         <nav style={styles.tabNav}>
           <button
             type="button"
             style={activeTab === 'inbox' ? styles.tabBtnActive : styles.tabBtn}
             onClick={() => setActiveTab('inbox')}
           >
-            📥 Bandeja de Entrada (Chats & Cotización)
+            📥 Bandeja de Entrada (3 Columnas)
           </button>
           <button
             type="button"
@@ -229,7 +227,6 @@ export default function ModuloVentasCRM() {
               <div style={styles.tagStatusRight}>{selectedConv?.status}</div>
             </div>
 
-            {/* Burbujas de chat */}
             <div style={styles.chatMessagesArea}>
               {selectedConv?.messages.map((m) => (
                 <div
@@ -246,11 +243,10 @@ export default function ModuloVentasCRM() {
               ))}
             </div>
 
-            {/* Input para responder manual */}
             <form onSubmit={handleSendReply} style={styles.chatInputBar}>
               <input
                 type="text"
-                placeholder="Escribí un mensaje..."
+                placeholder="Escribí una respuesta..."
                 value={inputReply}
                 onChange={(e) => setInputReply(e.target.value)}
                 style={styles.inputMessage}
@@ -261,15 +257,15 @@ export default function ModuloVentasCRM() {
             </form>
           </section>
 
-          {/* COLUMNA 3: FORMULARIO DE AUTOCOMPLETADO / PRECOTIZACIÓN */}
+          {/* COLUMNA 3: FORMULARIO DE PRECOTIZACIÓN */}
           <aside style={styles.colForm}>
             <div style={styles.formHeader}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
-                <span style={styles.badgeAiReady}>🤖 Autocompletado Listo</span>
+                <span style={styles.badgeAiReady}>Manual / IA Ready</span>
               </div>
               <p style={styles.formSubtitle}>
-                Completá manualmente o dejá que la IA procese la conversación.
+                Completá los valores técnicos para cotizar con precisión.
               </p>
             </div>
 
@@ -297,7 +293,7 @@ export default function ModuloVentasCRM() {
               </div>
 
               <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Producto / Mercadería Declarada:</label>
+                <label style={styles.fieldLabel}>Producto / Mercadería:</label>
                 <input
                   type="text"
                   style={styles.fieldInput}
@@ -319,7 +315,7 @@ export default function ModuloVentasCRM() {
                   />
                 </div>
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Incoterm Pactado:</label>
+                  <label style={styles.fieldLabel}>Incoterm:</label>
                   <select
                     style={styles.fieldSelect}
                     value={formData?.incoterm || 'FOB'}
@@ -335,7 +331,7 @@ export default function ModuloVentasCRM() {
 
               <div style={styles.threeCols}>
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Valor FOB (USD):</label>
+                  <label style={styles.fieldLabel}>FOB (USD):</label>
                   <input
                     type="number"
                     style={styles.fieldInput}
@@ -368,7 +364,7 @@ export default function ModuloVentasCRM() {
               </div>
 
               <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Modalidad de Flete Recomendada:</label>
+                <label style={styles.fieldLabel}>Modalidad de Flete:</label>
                 <select
                   style={styles.fieldSelect}
                   value={formData?.shippingMode || 'maritimo_compartido'}
@@ -382,21 +378,21 @@ export default function ModuloVentasCRM() {
               </div>
 
               <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Notas Operativas / Origen:</label>
+                <label style={styles.fieldLabel}>Notas Operativas:</label>
                 <textarea
                   style={styles.fieldTextarea}
                   value={formData?.notes || ''}
                   onChange={(e) => handleFormChange('notes', e.target.value)}
-                  placeholder="Detalles del proveedor chino, requerimientos de despacho, etc."
+                  placeholder="Detalles de proveedor, origen, puerto de salida, etc."
                 />
               </div>
 
               <button
                 type="button"
                 style={styles.btnActionQuote}
-                onClick={() => alert('Datos guardados y listos para exportar al Cotizador oficial.')}
+                onClick={() => alert('Ficha de cotización guardada localmente.')}
               >
-                💾 Guardar Ficha de Precotización
+                💾 Guardar Ficha
               </button>
             </div>
           </aside>
@@ -408,7 +404,7 @@ export default function ModuloVentasCRM() {
          ========================================================= */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
-          {/* BARRA SUPERIOR DE FILTROS POR ESTADO */}
+          {/* BOTONES SUPERIORES DE FILTRADO */}
           <div style={styles.filterButtonGroup}>
             <button
               type="button"
@@ -430,7 +426,7 @@ export default function ModuloVentasCRM() {
           </div>
 
           <div style={styles.estadosBodyGrid}>
-            {/* LISTADO LATERAL DE CONTACTOS SEGÚN ESTADO */}
+            {/* LISTA IZQUIERDA DE CONTACTOS SEGÚN ESTADO */}
             <div style={styles.estadosColList}>
               {filteredConversations.map((conv) => {
                 const isSelected = conv.id === selectedId;
@@ -457,7 +453,7 @@ export default function ModuloVentasCRM() {
               })}
             </div>
 
-            {/* PANEL CENTRAL: DETALLES BÁSICOS Y CAMBIO MANUAL DE ESTADO */}
+            {/* TARJETA CENTRAL: DETALLE Y CAMBIO MANUAL */}
             <div style={styles.estadosColDetail}>
               <div style={styles.cardDetailEstado}>
                 <div style={styles.cardDetailHeader}>
@@ -479,9 +475,8 @@ export default function ModuloVentasCRM() {
 
                 <hr style={styles.hr} />
 
-                {/* SELECTOR MANUAL DE NUEVO ESTADO */}
                 <div style={{ marginBottom: '20px' }}>
-                  <label style={styles.fieldLabel}>Modificar Estado Manualmente:</label>
+                  <label style={styles.fieldLabel}>Cambiar Estado con un Clic:</label>
                   <div style={styles.stateSelectorGrid}>
                     {estadosDisponibles.map((estado) => (
                       <button
@@ -501,7 +496,6 @@ export default function ModuloVentasCRM() {
                   </div>
                 </div>
 
-                {/* RESUMEN RÁPIDO DE LA CONVERSACIÓN */}
                 <div style={styles.summaryBox}>
                   <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#cbd5e1' }}>
                     ÚLTIMO MENSAJE REGISTRADO:
@@ -511,7 +505,6 @@ export default function ModuloVentasCRM() {
                   </p>
                 </div>
 
-                {/* SÍNTESIS BÁSICA DE LA CARGA */}
                 <div style={styles.cargoSummaryGrid}>
                   <div style={styles.cargoSummaryItem}>
                     <span style={styles.cargoLabel}>PRODUCTO</span>
