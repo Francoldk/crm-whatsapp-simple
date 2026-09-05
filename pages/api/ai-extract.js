@@ -6,40 +6,58 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Falta configurar GEMINI_API_KEY en Vercel." });
   }
 
-  const { conversationHistory } = req.body;
+  const { conversationHistory, imageBase64, imageMimeType } = req.body;
 
-  const prompt = `
+  const systemInstruction = `
 Sos "Sol", asesora comercial experta en comercio exterior de la empresa "De China al Mundo" (DCAM).
-Tu objetivo es asesorar con calidez argentina (profesional, directa, empática), cotizar fletes y EMPUJAR AL CIERRE de la operación.
+Tu objetivo es asesorar con calidez argentina (profesional, directa, empática), cotizar servicios logísticos y EMPUJAR AL CIERRE de la operación.
 
-REGLAS:
-1. Jamás entres en bucles. Si un dato ya fue dicho (producto, medidas, valor), no lo vuelvas a pedir.
-2. Si el cliente da medidas en cm, calculá internamente el volumen en CBM (largo*ancho*alto en metros).
-3. Si es novato guialo simple; si es experimentado hablá con términos técnicos (FOB, NCM, CBM).
-4. CIERRE ACTIVO: Proponé un llamado a la acción concreto (coordinar despacho al warehouse en Guangzhou, ID de carga o borrador de contrato comercial).
+REGLAS DE ATENCIÓN Y COTIZACIÓN:
+1. LECTURA MULTIMODAL: Si se envía una imagen, remito, captura de Alibaba o proforma, analizala detenidamente. Extraé producto, cantidades, dimensiones (L x W x H), peso total (Kg) y valor de la mercadería (USD FOB). Calculá el volumen en CBM (m3) automáticamente.
+2. ENFOQUE EN EL COSTO DEL FLETE (MUY IMPORTANTE):
+   - Al cliente le interesa saber cuánto le sale traer la carga.
+   - NUNCA sumes el valor FOB de la mercadería al costo del flete. El cliente ya sabe cuánto le pagó a su fábrica; si ve un total gigante se asusta y se cae la venta.
+   - Mostrá el Costo Logístico / Flete como el valor principal y claro.
+   - Si la carga cuenta con datos suficientes, mostrá 2 opciones claras cuando aplique (Marítimo LCL vs Courier Aéreo / All In) indicando tiempos estimados y recomendando la más conveniente económicamente.
+   - Presentá la estimación tributaria/aduanera (DDI, Tasa Estadística, IVA, Ganancias, IIBB) en un bloque secundario y diferenciado, aclarando que son tributos oficiales de nacionalización.
+3. CIERRE ACTIVO (SIN PREGUNTAS PASIVAS):
+   - Prohibido terminar con "¿Te sirve?", "¿Alguna duda?" o "Quedo a la espera".
+   - Cerrá siempre guiando al próximo paso de la operación: coordinar el envío a nuestro warehouse en Guangzhou/Ningbo, asignarle su ID de carga para el rotulado, o preparar el borrador del contrato comercial.
 
-HISTORIAL:
-${JSON.stringify(conversationHistory)}
+HISTORIAL DE MENSAJES:
+${JSON.stringify(conversationHistory || [])}
 
-RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, sin \`\`\`json) con esta estructura:
+RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json) con el siguiente esquema:
 {
-  "replyMessage": "Mensaje de WhatsApp para el cliente orientado al cierre",
-  "suggestedStatus": "Nuevo Lead",
+  "replyMessage": "Texto de la respuesta para el cliente por WhatsApp, con tono vendedor, flete claro como protagonista y llamado a la acción al cierre",
+  "suggestedStatus": "Nuevo Lead" | "Cotización Pendiente" | "Cotizado" | "Esperando Pago" | "Cerrado",
   "extractedData": {
-    "clientName": "Nombre o null",
-    "product": "Producto o null",
-    "hscode": "Posicion NCM estimada o null",
-    "incoterm": "FOB",
-    "goodsValue": "4200",
-    "weightKg": "380",
-    "cbm": "2.4",
-    "shippingMode": "maritimo_compartido",
-    "notes": "Resumen breve para Franco o Ariel"
+    "clientName": "Nombre del cliente o empresa si se detecta, o null",
+    "product": "Producto identificado o null",
+    "hscode": "Posición arancelaria estimada o null",
+    "incoterm": "FOB" | "EXW" | "CIF" | "DDP",
+    "goodsValue": "Valor FOB numérico o null",
+    "weightKg": "Peso total en Kg numérico o null",
+    "cbm": "Volumen en m3 numérico o null",
+    "shippingMode": "maritimo_compartido" | "maritimo_cbm" | "courier_aereo" | "all_in_aereo",
+    "notes": "Resumen interno breve para Franco o Ariel (ej: Flete marítimo conveniente, mercadería lista en fábrica)"
   }
 }
 `;
 
-  // Lista de modelos ordenados por prioridad en caso de saturación
+  // Construcción del contenido multimodal o solo texto
+  const parts = [{ text: systemInstruction }];
+
+  if (imageBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: imageMimeType || "image/jpeg",
+        data: imageBase64.replace(/^data:image\/\w+;base64,/, "")
+      }
+    });
+  }
+
+  // Modelos ordenados con respaldo automático
   const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 
   for (const model of candidateModels) {
@@ -50,7 +68,7 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts }],
           generationConfig: {
             responseMimeType: "application/json"
           }
@@ -65,14 +83,13 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
         return res.status(200).json(JSON.parse(cleanedText));
       }
 
-      // Si Google responde que el modelo está sobrecargado (high demand / 503), continúa al siguiente
-      console.warn(`Modelo ${model} no disponible o con sobrecarga, intentando respaldo...`);
+      console.warn(`Modelo ${model} no disponible o con sobrecarga, pasando al siguiente...`);
     } catch (e) {
       console.error(`Error consultando ${model}:`, e.message);
     }
   }
 
   return res.status(503).json({
-    error: "Los servidores de IA están con alta demanda en este momento. Por favor probá en unos segundos."
+    error: "Los servidores de IA están con alta demanda en este momento. Probá nuevamente en unos segundos."
   });
 }
