@@ -1,15 +1,11 @@
 import { useState } from 'react';
 
 export default function ModuloVentasCRM() {
-  const [activeTab, setActiveTab] = useState('inbox'); // 'inbox' | 'estados'
-
-  // Control Maestro del Asistente Virtual Sol
+  const [activeTab, setActiveTab] = useState('inbox');
   const [solActive, setSolActive] = useState(true);
-
-  // Vista de bandeja: 'activos' o 'archivados'
   const [inboxFilter, setInboxFilter] = useState('activos');
+  const [loadingAi, setLoadingAi] = useState(false);
 
-  // Listado de conversaciones
   const [conversations, setConversations] = useState([
     {
       id: 1,
@@ -33,7 +29,7 @@ export default function ModuloVentasCRM() {
       },
       messages: [
         { id: 101, sender: 'client', text: 'Hola Franco, cómo estás?', time: '11:15' },
-        { id: 102, sender: 'client', text: 'Me podés pasar el costo de 40 cubiertas puestas en Córdoba?', time: '11:20' }
+        { id: 102, sender: 'client', text: 'Me podés pasar el costo de 40 cubiertas puestas en Córdoba? Son 380kg y 2.4 CBM por 4200 USD FOB.', time: '11:20' }
       ]
     },
     {
@@ -94,13 +90,11 @@ export default function ModuloVentasCRM() {
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
 
-  // Seleccionar conversación activa
   const handleSelectConversation = (conv) => {
     setSelectedId(conv.id);
     setFormData(conv.quoteData);
   };
 
-  // Modificar formulario de precotización
   const handleFormChange = (field, value) => {
     const updated = { ...formData, [field]: value };
     setFormData(updated);
@@ -109,14 +103,56 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Modificar estado manualmente
   const handleStatusChange = (newStatus) => {
     setConversations((prev) =>
       prev.map((c) => (c.id === selectedId ? { ...c, status: newStatus } : c))
     );
   };
 
-  // Acciones en la lista de chats: Archivar / Desarchivar
+  // Disparador de Sol AI
+  const handleTriggerSolAI = async () => {
+    setLoadingAi(true);
+    try {
+      const res = await fetch('/api/ai-extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationHistory: selectedConv.messages })
+      });
+
+      if (!res.ok) throw new Error('Error al conectar con Sol AI');
+      const data = await res.json();
+
+      // 1. Rellenar formulario con datos extraídos
+      if (data.extractedData) {
+        const mergedData = {
+          ...formData,
+          ...Object.fromEntries(
+            Object.entries(data.extractedData).filter(([_, v]) => v !== null && v !== '')
+          )
+        };
+        setFormData(mergedData);
+        setConversations((prev) =>
+          prev.map((c) => (c.id === selectedId ? { ...c, quoteData: mergedData } : c))
+        );
+      }
+
+      // 2. Cargar respuesta orientada al cierre en el input
+      if (data.replyMessage) {
+        setInputReply(data.replyMessage);
+      }
+
+      // 3. Sugerir cambio de estado si corresponde
+      if (data.suggestedStatus) {
+        handleStatusChange(data.suggestedStatus);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Hubo un problema al procesar con Sol. Verificá tu GEMINI_API_KEY.');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
   const handleToggleArchive = (id, e) => {
     e.stopPropagation();
     setConversations((prev) =>
@@ -124,7 +160,6 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Acciones en la lista de chats: Borrar
   const handleDeleteConversation = (id, e) => {
     e.stopPropagation();
     if (confirm('¿Eliminar esta conversación del CRM?')) {
@@ -137,7 +172,6 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Acciones en la lista de chats: Renombrar
   const handleRenameConversation = (id, currentName, e) => {
     e.stopPropagation();
     const newName = prompt('Ingrese el nuevo nombre para este contacto:', currentName);
@@ -155,7 +189,6 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Enviar mensaje manual
   const handleSendReply = (e) => {
     e.preventDefault();
     if (!inputReply.trim()) return;
@@ -186,7 +219,6 @@ export default function ModuloVentasCRM() {
     'Cerrado'
   ];
 
-  // Filtro de lista según pestaña de archivados/activos
   const displayedConversations = conversations.filter((c) =>
     inboxFilter === 'activos' ? !c.archived : c.archived
   );
@@ -198,7 +230,6 @@ export default function ModuloVentasCRM() {
 
   return (
     <div style={styles.container}>
-      {/* BARRA SUPERIOR CON TOGGLE DE ASISTENTE SOL */}
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
           <img src="/logo.png" alt="De China Al Mundo" style={styles.logoImg} />
@@ -209,7 +240,6 @@ export default function ModuloVentasCRM() {
           </div>
         </div>
 
-        {/* INTERRUPTOR CENTRAL: ASISTENTE VIRTUAL SOL */}
         <div style={styles.solControlCard}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '18px' }}>☀️</span>
@@ -237,7 +267,6 @@ export default function ModuloVentasCRM() {
           </button>
         </div>
 
-        {/* NAVEGACIÓN ENTRE PESTAÑAS */}
         <nav style={styles.tabNav}>
           <button
             type="button"
@@ -256,17 +285,13 @@ export default function ModuloVentasCRM() {
         </nav>
       </header>
 
-      {/* =========================================================
-          PESTAÑA 1: BANDEJA DE ENTRADA (ESTRUCTURA DE 3 COLUMNAS)
-         ========================================================= */}
       {activeTab === 'inbox' && (
         <main style={styles.mainGrid}>
-          {/* COLUMNA 1: LISTADO DE CHATS CON ACCIONES */}
+          {/* COLUMNA 1 */}
           <aside style={styles.colInbox}>
             <div style={styles.inboxHeader}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={styles.inboxTitle}>Mensajes</span>
-                {/* Switch Activos / Archivados */}
                 <div style={styles.archiveToggleGroup}>
                   <button
                     type="button"
@@ -318,8 +343,6 @@ export default function ModuloVentasCRM() {
 
                       <div style={styles.cardFooterActions}>
                         <span style={styles.badgeStatusMini}>{conv.status}</span>
-
-                        {/* BOTONCITOS AL COSTADO: RENOMBRAR, ARCHIVAR, BORRAR */}
                         <div style={styles.actionButtonsRow}>
                           <button
                             type="button"
@@ -354,7 +377,7 @@ export default function ModuloVentasCRM() {
             </div>
           </aside>
 
-          {/* COLUMNA 2: VISOR DE CONVERSACIÓN ACTIVA */}
+          {/* COLUMNA 2 */}
           <section style={styles.colChat}>
             <div style={styles.chatWindowHeader}>
               <div>
@@ -385,7 +408,7 @@ export default function ModuloVentasCRM() {
             <form onSubmit={handleSendReply} style={styles.chatInputBar}>
               <input
                 type="text"
-                placeholder="Escribí una respuesta..."
+                placeholder="Escribí una respuesta o usá la sugerencia de Sol..."
                 value={inputReply}
                 onChange={(e) => setInputReply(e.target.value)}
                 style={styles.inputMessage}
@@ -396,16 +419,27 @@ export default function ModuloVentasCRM() {
             </form>
           </section>
 
-          {/* COLUMNA 3: FORMULARIO DE PRECOTIZACIÓN */}
+          {/* COLUMNA 3 */}
           <aside style={styles.colForm}>
             <div style={styles.formHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
-                <span style={styles.badgeAiReady}>Manual / IA Ready</span>
+                <span style={styles.badgeAiReady}>Gemini 1.5 Flash</span>
               </div>
-              <p style={styles.formSubtitle}>
-                Completá los valores técnicos para cotizar con precisión.
-              </p>
+
+              {/* BOTÓN DISPARADOR SOL IA */}
+              <button
+                type="button"
+                onClick={handleTriggerSolAI}
+                disabled={loadingAi}
+                style={{
+                  ...styles.btnTriggerAi,
+                  opacity: loadingAi ? 0.7 : 1,
+                  cursor: loadingAi ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {loadingAi ? '⏳ Sol está analizando el chat...' : '⚡ Sol: Autocompletar & Sugerir Cierre'}
+              </button>
             </div>
 
             <div style={styles.formScroll}>
@@ -444,7 +478,7 @@ export default function ModuloVentasCRM() {
 
               <div style={styles.twoCols}>
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Posición Arancelaria (NCM/PA):</label>
+                  <label style={styles.fieldLabel}>Posición Arancelaria (NCM):</label>
                   <input
                     type="text"
                     style={styles.fieldInput}
@@ -517,19 +551,19 @@ export default function ModuloVentasCRM() {
               </div>
 
               <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Notas Operativas:</label>
+                <label style={styles.fieldLabel}>Notas Operativas / Resumen:</label>
                 <textarea
                   style={styles.fieldTextarea}
                   value={formData?.notes || ''}
                   onChange={(e) => handleFormChange('notes', e.target.value)}
-                  placeholder="Detalles de proveedor, origen, puerto de salida, etc."
+                  placeholder="Detalles operativos de la carga."
                 />
               </div>
 
               <button
                 type="button"
                 style={styles.btnActionQuote}
-                onClick={() => alert('Ficha de cotización guardada localmente.')}
+                onClick={() => alert('Ficha de cotización guardada.')}
               >
                 💾 Guardar Ficha
               </button>
@@ -538,9 +572,6 @@ export default function ModuloVentasCRM() {
         </main>
       )}
 
-      {/* =========================================================
-          PESTAÑA 2: ESTADOS DE CONVERSACIONES (TABLERO Y BOTONES)
-         ========================================================= */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
           <div style={styles.filterButtonGroup}>
@@ -767,7 +798,7 @@ const styles = {
   mainGrid: {
     flex: 1,
     display: 'grid',
-    gridTemplateColumns: '340px 1fr 380px',
+    gridTemplateColumns: '340px 1fr 390px',
     overflow: 'hidden'
   },
   colInbox: {
@@ -998,10 +1029,18 @@ const styles = {
     padding: '2px 6px',
     borderRadius: '4px'
   },
-  formSubtitle: {
-    margin: '4px 0 0 0',
-    fontSize: '11px',
-    color: '#64748b'
+  btnTriggerAi: {
+    width: '100%',
+    backgroundColor: '#1e1b4b',
+    color: '#a5b4fc',
+    border: '1px solid #4338ca',
+    padding: '9px 12px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    textAlign: 'center'
   },
   formScroll: {
     flex: 1,
@@ -1045,7 +1084,7 @@ const styles = {
   },
   fieldTextarea: {
     width: '100%',
-    height: '65px',
+    height: '60px',
     boxSizing: 'border-box',
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
