@@ -21,7 +21,7 @@ REGLAS:
 HISTORIAL:
 ${JSON.stringify(conversationHistory)}
 
-RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, sin \`\`\`json) con esta estructura:
+RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin markdown, sin \`\`\`json) con esta estructura:
 {
   "replyMessage": "Mensaje de WhatsApp para el cliente orientado al cierre",
   "suggestedStatus": "Nuevo Lead",
@@ -40,8 +40,7 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
 `;
 
   try {
-    // Usamos el endpoint oficial de producción v1 (estable)
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -57,27 +56,11 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
     const data = await response.json();
 
     if (!response.ok) {
-      // Si v1 no lo toma, probamos fallback automático a gemini-2.0-flash
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-      const fallbackRes = await fetch(fallbackUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
-      const fallbackData = await fallbackRes.json();
-      if (!fallbackRes.ok) {
-        throw new Error(fallbackData.error?.message || data.error?.message || "Fallo en API de Gemini");
-      }
-      const text = fallbackData.candidates?.[0]?.content?.parts?.[0]?.text;
-      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      return res.status(200).json(JSON.parse(cleaned));
+      throw new Error(data.error?.message || "Error devuelto por la API de Google");
     }
 
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) throw new Error("Google no devolvió contenido");
+    if (!rawText) throw new Error("Google no devolvió contenido de texto");
 
     const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     const parsedData = JSON.parse(cleanedText);
