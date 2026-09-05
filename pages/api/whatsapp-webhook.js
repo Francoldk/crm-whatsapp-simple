@@ -1,66 +1,69 @@
-// Almacén en memoria compartida para pruebas
-if (!global.crmConversations) {
-  global.crmConversations = [
-    {
-      id: '5493512345678',
-      name: 'Distribuidora San Vicente',
-      phone: '5493512345678',
-      lastMessage: 'Hola Franco, me podés pasar el costo de 40 cubiertas puestas en Córdoba?',
-      time: '11:20',
-      status: 'Cotización Pendiente',
-      archived: false,
-      quoteData: {
-        clientName: 'Distribuidora San Vicente',
-        phone: '5493512345678',
-        product: 'Cubiertas / Neumáticos rodado 14',
-        hscode: '4011.10.00',
-        incoterm: 'FOB',
-        goodsValue: '4200',
-        weightKg: '380',
-        cbm: '2.4',
-        shippingMode: 'maritimo_compartido',
-        notes: 'Cliente busca traer consolidado.'
-      },
-      messages: [
-        { id: 101, sender: 'client', text: 'Hola Franco, cómo estás?', time: '11:15' },
-        { id: 102, sender: 'client', text: 'Me podés pasar el costo de 40 cubiertas puestas en Córdoba? Son 380kg y 2.4 CBM por 4200 USD FOB.', time: '11:20' }
-      ]
-    }
-  ];
+let store = globalThis.__crmConversationsStore;
+if (!store) {
+  store = [];
+  globalThis.__crmConversationsStore = store;
 }
 
 export default async function handler(req, res) {
-  // 1. EL FRONTEND CONSULTA LOS MENSAJES (GET)
+  // Manejar CORS por si las dudas
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   if (req.method === 'GET') {
-    return res.status(200).json(global.crmConversations);
+    return res.status(200).json(store);
   }
 
-  // 2. EL BOT DE WHATSAPP ENVÍA UN MENSAJE (POST)
-  if (req.method === 'POST') {
-    const { phone, name, text, imageBase64, imageMimeType } = req.body;
+  if (req.method === 'PATCH') {
+    const { phone, botActive } = req.body;
+    const cleanPhone = String(phone).replace(/\D/g, '');
+    const conv = store.find((c) => String(c.phone).replace(/\D/g, '') === cleanPhone);
 
-    if (!phone) {
-      return res.status(400).json({ error: 'Falta el número de teléfono' });
+    if (conv) {
+      conv.botActive = botActive;
+      return res.status(200).json({ success: true, conv });
     }
+    return res.status(404).json({ error: 'Conversación no encontrada' });
+  }
 
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const clientName = name || `Lead +${cleanPhone}`;
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (req.method === 'POST') {
+    const { phone, name, text, sender, status, quoteData } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Falta teléfono' });
 
-    // Buscar si ya existe la conversación o crear una nueva
-    let conv = global.crmConversations.find((c) => c.phone === cleanPhone);
+    const cleanPhone = String(phone).replace(/\D/g, '');
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    if (!conv) {
+    let conv = store.find((c) => String(c.phone).replace(/\D/g, '') === cleanPhone);
+
+    const newMsg = {
+      id: Date.now(),
+      sender: sender || 'user',
+      text: text || '',
+      time: now
+    };
+
+    if (conv) {
+      if (text) conv.messages.push(newMsg);
+      conv.lastMessage = text || conv.lastMessage;
+      conv.time = now;
+      if (name && (!conv.name || conv.name.includes('+'))) conv.name = name;
+      if (status) conv.status = status;
+      if (quoteData) conv.quoteData = { ...conv.quoteData, ...quoteData };
+    } else {
       conv = {
         id: cleanPhone,
-        name: clientName,
         phone: cleanPhone,
-        lastMessage: text || '[Archivo adjunto]',
-        time: nowTime,
-        status: 'Nuevo Lead',
+        name: name || `+${cleanPhone}`,
+        lastMessage: text || '',
+        time: now,
+        status: status || 'Nuevo Lead',
         archived: false,
-        quoteData: {
-          clientName: clientName,
+        botActive: true,
+        messages: text ? [newMsg] : [],
+        quoteData: quoteData || {
+          clientName: name || '',
           phone: cleanPhone,
           product: '',
           hscode: '',
@@ -70,76 +73,13 @@ export default async function handler(req, res) {
           cbm: '',
           shippingMode: 'maritimo_compartido',
           notes: ''
-        },
-        messages: []
+        }
       };
-      global.crmConversations.unshift(conv);
+      store.unshift(conv);
     }
 
-    // Agregar mensaje del cliente
-    conv.messages.push({
-      id: Date.now(),
-      sender: 'client',
-      text: text || '[Foto enviada]',
-      time: nowTime
-    });
-    conv.lastMessage = text || '[Foto enviada]';
-    conv.time = nowTime;
-
-    let solReply = null;
-
-    try {
-      // Invocamos a Sol
-      const host = req.headers.host;
-      const protocol = req.headers['x-forwarded-proto'] || 'https';
-      const aiUrl = `${protocol}://${host}/api/ai-extract`;
-
-      const aiRes = await fetch(aiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationHistory: conv.messages,
-          imageBase64,
-          imageMimeType
-        })
-      });
-
-      const aiData = await aiRes.json();
-
-      if (aiData.replyMessage) {
-        solReply = aiData.replyMessage;
-        // Guardar mensaje de Sol en el historial del CRM
-        conv.messages.push({
-          id: Date.now() + 1,
-          sender: 'me',
-          text: solReply,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-        conv.lastMessage = solReply;
-      }
-
-      if (aiData.extractedData) {
-        conv.quoteData = {
-          ...conv.quoteData,
-          ...Object.fromEntries(
-            Object.entries(aiData.extractedData).filter(([_, v]) => v !== null && v !== '')
-          )
-        };
-      }
-
-      if (aiData.suggestedStatus) {
-        conv.status = aiData.suggestedStatus;
-      }
-    } catch (err) {
-      console.error('Error al procesar con Sol:', err.message);
-    }
-
-    return res.status(200).json({
-      success: true,
-      replyMessage: solReply,
-      extractedData: conv.quoteData
-    });
+    return res.status(200).json({ success: true, conversation: conv });
   }
 
-  return res.status(405).end();
+  return res.status(405).json({ error: 'Método no permitido' });
 }
