@@ -3,7 +3,13 @@ import { useState } from 'react';
 export default function ModuloVentasCRM() {
   const [activeTab, setActiveTab] = useState('inbox'); // 'inbox' | 'estados'
 
-  // Lista de conversaciones activas del CRM
+  // Control Maestro del Asistente Virtual Sol
+  const [solActive, setSolActive] = useState(true);
+
+  // Vista de bandeja: 'activos' o 'archivados'
+  const [inboxFilter, setInboxFilter] = useState('activos');
+
+  // Listado de conversaciones
   const [conversations, setConversations] = useState([
     {
       id: 1,
@@ -12,6 +18,7 @@ export default function ModuloVentasCRM() {
       lastMessage: 'Hola Franco, me podés pasar el costo de 40 cubiertas puestas en Córdoba?',
       time: '11:20',
       status: 'Cotización Pendiente',
+      archived: false,
       quoteData: {
         clientName: 'Distribuidora San Vicente',
         phone: '5493512345678',
@@ -36,6 +43,7 @@ export default function ModuloVentasCRM() {
       lastMessage: 'Ariel me pasó tu contacto. Tengo 2 pallets listos en Ningbo.',
       time: 'Ayer',
       status: 'Nuevo Lead',
+      archived: false,
       quoteData: {
         clientName: 'Marcos Repuestos',
         phone: '5491145678901',
@@ -59,6 +67,7 @@ export default function ModuloVentasCRM() {
       lastMessage: 'Impecable la cotización, ya coordinamos el pago del flete.',
       time: '02/09',
       status: 'Esperando Pago',
+      archived: false,
       quoteData: {
         clientName: 'TecnoGlobal S.A.S.',
         phone: '5493519876543',
@@ -81,18 +90,17 @@ export default function ModuloVentasCRM() {
   const [selectedId, setSelectedId] = useState(1);
   const selectedConv = conversations.find((c) => c.id === selectedId) || conversations[0];
 
-  // Estado del formulario de precotización vinculado al chat seleccionado
   const [formData, setFormData] = useState(selectedConv?.quoteData);
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
 
-  // Seleccionar conversación
+  // Seleccionar conversación activa
   const handleSelectConversation = (conv) => {
     setSelectedId(conv.id);
     setFormData(conv.quoteData);
   };
 
-  // Modificar formulario
+  // Modificar formulario de precotización
   const handleFormChange = (field, value) => {
     const updated = { ...formData, [field]: value };
     setFormData(updated);
@@ -101,14 +109,53 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Modificar estado del lead
+  // Modificar estado manualmente
   const handleStatusChange = (newStatus) => {
     setConversations((prev) =>
       prev.map((c) => (c.id === selectedId ? { ...c, status: newStatus } : c))
     );
   };
 
-  // Enviar mensaje en el chat
+  // Acciones en la lista de chats: Archivar / Desarchivar
+  const handleToggleArchive = (id, e) => {
+    e.stopPropagation();
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, archived: !c.archived } : c))
+    );
+  };
+
+  // Acciones en la lista de chats: Borrar
+  const handleDeleteConversation = (id, e) => {
+    e.stopPropagation();
+    if (confirm('¿Eliminar esta conversación del CRM?')) {
+      const remaining = conversations.filter((c) => c.id !== id);
+      setConversations(remaining);
+      if (selectedId === id && remaining.length > 0) {
+        setSelectedId(remaining[0].id);
+        setFormData(remaining[0].quoteData);
+      }
+    }
+  };
+
+  // Acciones en la lista de chats: Renombrar
+  const handleRenameConversation = (id, currentName, e) => {
+    e.stopPropagation();
+    const newName = prompt('Ingrese el nuevo nombre para este contacto:', currentName);
+    if (newName && newName.trim()) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? { ...c, name: newName.trim(), quoteData: { ...c.quoteData, clientName: newName.trim() } }
+            : c
+        )
+      );
+      if (selectedId === id) {
+        setFormData((prev) => ({ ...prev, clientName: newName.trim() }));
+      }
+    }
+  };
+
+  // Enviar mensaje manual
   const handleSendReply = (e) => {
     e.preventDefault();
     if (!inputReply.trim()) return;
@@ -139,14 +186,19 @@ export default function ModuloVentasCRM() {
     'Cerrado'
   ];
 
-  const filteredConversations =
+  // Filtro de lista según pestaña de archivados/activos
+  const displayedConversations = conversations.filter((c) =>
+    inboxFilter === 'activos' ? !c.archived : c.archived
+  );
+
+  const filteredByStatus =
     statusFilter === 'TODOS'
       ? conversations
       : conversations.filter((c) => c.status === statusFilter);
 
   return (
     <div style={styles.container}>
-      {/* BARRA SUPERIOR CON IDENTIDAD DCAM */}
+      {/* BARRA SUPERIOR CON TOGGLE DE ASISTENTE SOL */}
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
           <img src="/logo.png" alt="De China Al Mundo" style={styles.logoImg} />
@@ -157,21 +209,49 @@ export default function ModuloVentasCRM() {
           </div>
         </div>
 
-        {/* NAVEGACIÓN ENTRE SOLAPAS */}
+        {/* INTERRUPTOR CENTRAL: ASISTENTE VIRTUAL SOL */}
+        <div style={styles.solControlCard}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px' }}>☀️</span>
+            <div>
+              <div style={styles.solTitleText}>Asistente Virtual: <strong>Sol</strong></div>
+              <div style={styles.solStatusText}>
+                {solActive ? (
+                  <span style={{ color: '#34d399' }}>● Respuestas Automáticas ACTIVAS</span>
+                ) : (
+                  <span style={{ color: '#f87171' }}>○ Respuestas Automáticas EN PAUSA</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSolActive(!solActive)}
+            style={{
+              ...styles.solToggleBtn,
+              backgroundColor: solActive ? '#065f46' : '#334155',
+              borderColor: solActive ? '#10b981' : '#64748b'
+            }}
+          >
+            {solActive ? 'PAUSAR SOL' : 'ACTIVAR SOL'}
+          </button>
+        </div>
+
+        {/* NAVEGACIÓN ENTRE PESTAÑAS */}
         <nav style={styles.tabNav}>
           <button
             type="button"
             style={activeTab === 'inbox' ? styles.tabBtnActive : styles.tabBtn}
             onClick={() => setActiveTab('inbox')}
           >
-            📥 Bandeja de Entrada (3 Columnas)
+            📥 Bandeja (3 Columnas)
           </button>
           <button
             type="button"
             style={activeTab === 'estados' ? styles.tabBtnActive : styles.tabBtn}
             onClick={() => setActiveTab('estados')}
           >
-            📊 Estados de Conversaciones
+            📊 Estados
           </button>
         </nav>
       </header>
@@ -181,13 +261,38 @@ export default function ModuloVentasCRM() {
          ========================================================= */}
       {activeTab === 'inbox' && (
         <main style={styles.mainGrid}>
-          {/* COLUMNA 1: LISTADO DE WHATSAPP CON VISTA PREVIA */}
+          {/* COLUMNA 1: LISTADO DE CHATS CON ACCIONES */}
           <aside style={styles.colInbox}>
             <div style={styles.inboxHeader}>
-              <span style={styles.inboxTitle}>Mensajes Entrantes ({conversations.length})</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={styles.inboxTitle}>Mensajes</span>
+                {/* Switch Activos / Archivados */}
+                <div style={styles.archiveToggleGroup}>
+                  <button
+                    type="button"
+                    style={inboxFilter === 'activos' ? styles.btnFilterActive : styles.btnFilterInactive}
+                    onClick={() => setInboxFilter('activos')}
+                  >
+                    Activos
+                  </button>
+                  <button
+                    type="button"
+                    style={inboxFilter === 'archivados' ? styles.btnFilterActive : styles.btnFilterInactive}
+                    onClick={() => setInboxFilter('archivados')}
+                  >
+                    Archivados
+                  </button>
+                </div>
+              </div>
             </div>
+
             <div style={styles.chatScrollList}>
-              {conversations.map((conv) => {
+              {displayedConversations.length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                  No hay conversaciones en esta sección.
+                </div>
+              )}
+              {displayedConversations.map((conv) => {
                 const isSelected = conv.id === selectedId;
                 return (
                   <div
@@ -202,6 +307,7 @@ export default function ModuloVentasCRM() {
                     <div style={styles.chatAvatar}>
                       {conv.name.charAt(0).toUpperCase()}
                     </div>
+
                     <div style={styles.chatContentBox}>
                       <div style={styles.chatTopLine}>
                         <strong style={styles.chatName}>{conv.name}</strong>
@@ -209,7 +315,38 @@ export default function ModuloVentasCRM() {
                       </div>
                       <div style={styles.chatPhone}>+{conv.phone}</div>
                       <p style={styles.chatSnippet}>{conv.lastMessage}</p>
-                      <span style={styles.badgeStatusMini}>{conv.status}</span>
+
+                      <div style={styles.cardFooterActions}>
+                        <span style={styles.badgeStatusMini}>{conv.status}</span>
+
+                        {/* BOTONCITOS AL COSTADO: RENOMBRAR, ARCHIVAR, BORRAR */}
+                        <div style={styles.actionButtonsRow}>
+                          <button
+                            type="button"
+                            title="Renombrar cliente"
+                            style={styles.btnMiniAction}
+                            onClick={(e) => handleRenameConversation(conv.id, conv.name, e)}
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            title={conv.archived ? 'Desarchivar' : 'Archivar conversación'}
+                            style={styles.btnMiniAction}
+                            onClick={(e) => handleToggleArchive(conv.id, e)}
+                          >
+                            {conv.archived ? '📤' : '📦'}
+                          </button>
+                          <button
+                            type="button"
+                            title="Borrar conversación"
+                            style={{ ...styles.btnMiniAction, color: '#f87171' }}
+                            onClick={(e) => handleDeleteConversation(conv.id, e)}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -224,7 +361,9 @@ export default function ModuloVentasCRM() {
                 <h3 style={styles.chatTargetName}>{selectedConv?.name}</h3>
                 <span style={styles.chatTargetPhone}>+{selectedConv?.phone}</span>
               </div>
-              <div style={styles.tagStatusRight}>{selectedConv?.status}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={styles.tagStatusRight}>{selectedConv?.status}</div>
+              </div>
             </div>
 
             <div style={styles.chatMessagesArea}>
@@ -404,7 +543,6 @@ export default function ModuloVentasCRM() {
          ========================================================= */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
-          {/* BOTONES SUPERIORES DE FILTRADO */}
           <div style={styles.filterButtonGroup}>
             <button
               type="button"
@@ -426,9 +564,8 @@ export default function ModuloVentasCRM() {
           </div>
 
           <div style={styles.estadosBodyGrid}>
-            {/* LISTA IZQUIERDA DE CONTACTOS SEGÚN ESTADO */}
             <div style={styles.estadosColList}>
-              {filteredConversations.map((conv) => {
+              {filteredByStatus.map((conv) => {
                 const isSelected = conv.id === selectedId;
                 return (
                   <button
@@ -453,7 +590,6 @@ export default function ModuloVentasCRM() {
               })}
             </div>
 
-            {/* TARJETA CENTRAL: DETALLE Y CAMBIO MANUAL */}
             <div style={styles.estadosColDetail}>
               <div style={styles.cardDetailEstado}>
                 <div style={styles.cardDetailHeader}>
@@ -577,6 +713,33 @@ const styles = {
     fontSize: '11px',
     color: '#94a3b8'
   },
+  solControlCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    backgroundColor: '#1e293b',
+    padding: '6px 14px',
+    borderRadius: '8px',
+    border: '1px solid #334155'
+  },
+  solTitleText: {
+    fontSize: '12px',
+    color: '#f8fafc'
+  },
+  solStatusText: {
+    fontSize: '10px',
+    fontWeight: 'bold'
+  },
+  solToggleBtn: {
+    color: '#ffffff',
+    border: '1px solid',
+    padding: '6px 12px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: '800',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
   tabNav: {
     display: 'flex',
     gap: '8px'
@@ -604,7 +767,7 @@ const styles = {
   mainGrid: {
     flex: 1,
     display: 'grid',
-    gridTemplateColumns: '320px 1fr 380px',
+    gridTemplateColumns: '340px 1fr 380px',
     overflow: 'hidden'
   },
   colInbox: {
@@ -614,7 +777,7 @@ const styles = {
     flexDirection: 'column'
   },
   inboxHeader: {
-    padding: '12px 16px',
+    padding: '12px 14px',
     borderBottom: '1px solid #1e293b',
     backgroundColor: '#0f172a'
   },
@@ -625,21 +788,44 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   },
+  archiveToggleGroup: {
+    display: 'flex',
+    gap: '4px'
+  },
+  btnFilterActive: {
+    backgroundColor: '#881337',
+    color: '#fff',
+    border: 'none',
+    padding: '3px 8px',
+    borderRadius: '4px',
+    fontSize: '10px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  btnFilterInactive: {
+    backgroundColor: '#1e293b',
+    color: '#94a3b8',
+    border: 'none',
+    padding: '3px 8px',
+    borderRadius: '4px',
+    fontSize: '10px',
+    cursor: 'pointer'
+  },
   chatScrollList: {
     flex: 1,
     overflowY: 'auto'
   },
   chatItemCard: {
     display: 'flex',
-    gap: '12px',
-    padding: '14px 16px',
+    gap: '10px',
+    padding: '12px 14px',
     cursor: 'pointer',
     borderBottom: '1px solid #1e293b',
     transition: 'background 0.2s'
   },
   chatAvatar: {
-    width: '38px',
-    height: '38px',
+    width: '36px',
+    height: '36px',
     borderRadius: '50%',
     backgroundColor: '#881337',
     color: '#fff',
@@ -672,26 +858,43 @@ const styles = {
   chatPhone: {
     fontSize: '11px',
     color: '#64748b',
-    marginBottom: '3px'
+    marginBottom: '2px'
   },
   chatSnippet: {
     margin: 0,
-    fontSize: '12px',
+    fontSize: '11.5px',
     color: '#94a3b8',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   },
+  cardFooterActions: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '6px'
+  },
   badgeStatusMini: {
-    display: 'inline-block',
-    marginTop: '6px',
     fontSize: '9.5px',
     fontWeight: 'bold',
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
     color: '#fbbf24',
-    padding: '2px 6px',
+    padding: '2px 5px',
     borderRadius: '4px'
+  },
+  actionButtonsRow: {
+    display: 'flex',
+    gap: '4px'
+  },
+  btnMiniAction: {
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    borderRadius: '4px',
+    fontSize: '11px',
+    padding: '2px 6px',
+    cursor: 'pointer',
+    transition: 'background 0.2s'
   },
   colChat: {
     display: 'flex',
