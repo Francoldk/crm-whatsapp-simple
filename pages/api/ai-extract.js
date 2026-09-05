@@ -1,10 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
   const apiKey = process.env.GEMINI_API_KEY;
-
   if (!apiKey) {
     return res.status(500).json({ error: "Falta configurar GEMINI_API_KEY en Vercel." });
   }
@@ -24,40 +21,54 @@ REGLAS:
 HISTORIAL:
 ${JSON.stringify(conversationHistory)}
 
-RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO con este esquema exacto:
+RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, sin \`\`\`json) con esta estructura:
 {
   "replyMessage": "Mensaje de WhatsApp para el cliente orientado al cierre",
-  "suggestedStatus": "Nuevo Lead" | "Cotización Pendiente" | "Cotizado" | "Esperando Pago" | "Cerrado",
+  "suggestedStatus": "Nuevo Lead",
   "extractedData": {
     "clientName": "Nombre o null",
     "product": "Producto o null",
     "hscode": "Posicion NCM estimada o null",
-    "incoterm": "FOB" | "EXW" | "CIF" | "DDP",
-    "goodsValue": "Valor numerico o null",
-    "weightKg": "Peso numerico o null",
-    "cbm": "Volumen numerico o null",
-    "shippingMode": "maritimo_compartido" | "maritimo_cbm" | "courier_aereo" | "all_in_aereo",
-    "notes": "Resumen interno breve"
+    "incoterm": "FOB",
+    "goodsValue": "4200",
+    "weightKg": "380",
+    "cbm": "2.4",
+    "shippingMode": "maritimo_compartido",
+    "notes": "Resumen breve para Franco o Ariel"
   }
 }
 `;
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // Versión fija compatible con la API
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-002",
-      generationConfig: { responseMimeType: "application/json" }
+    // Consulta directa vía REST a v1beta gemini-1.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      })
     });
 
-    const result = await model.generateContent(prompt);
-    const textResponse = result.response.text();
-    const parsedData = JSON.parse(textResponse);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || "Error al invocar API de Google");
+    }
+
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) throw new Error("Google no devolvió contenido");
+
+    const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsedData = JSON.parse(cleanedText);
 
     return res.status(200).json(parsedData);
   } catch (error) {
-    console.error("Error detallado en Gemini:", error);
-    return res.status(500).json({ error: error.message || "Error al procesar con Gemini" });
+    console.error("Error en ai-extract:", error);
+    return res.status(500).json({ error: error.message || "Error procesando con Sol AI" });
   }
 }
