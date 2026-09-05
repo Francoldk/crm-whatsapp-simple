@@ -1,94 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function ModuloVentasCRM() {
   const [activeTab, setActiveTab] = useState('inbox');
   const [solActive, setSolActive] = useState(true);
   const [inboxFilter, setInboxFilter] = useState('activos');
   const [loadingAi, setLoadingAi] = useState(false);
-
-  const [conversations, setConversations] = useState([
-    {
-      id: 1,
-      name: 'Distribuidora San Vicente',
-      phone: '5493512345678',
-      lastMessage: 'Hola Franco, me podés pasar el costo de 40 cubiertas puestas en Córdoba?',
-      time: '11:20',
-      status: 'Cotización Pendiente',
-      archived: false,
-      quoteData: {
-        clientName: 'Distribuidora San Vicente',
-        phone: '5493512345678',
-        product: 'Cubiertas / Neumáticos rodado 14',
-        hscode: '4011.10.00',
-        incoterm: 'FOB',
-        goodsValue: '4200',
-        weightKg: '380',
-        cbm: '2.4',
-        shippingMode: 'maritimo_compartido',
-        notes: 'Cliente busca traer consolidado vía Santos o directo a Bs As.'
-      },
-      messages: [
-        { id: 101, sender: 'client', text: 'Hola Franco, cómo estás?', time: '11:15' },
-        { id: 102, sender: 'client', text: 'Me podés pasar el costo de 40 cubiertas puestas en Córdoba? Son 380kg y 2.4 CBM por 4200 USD FOB.', time: '11:20' }
-      ]
-    },
-    {
-      id: 2,
-      name: 'Marcos Repuestos',
-      phone: '5491145678901',
-      lastMessage: 'Ariel me pasó tu contacto. Tengo 2 pallets listos en Ningbo.',
-      time: 'Ayer',
-      status: 'Nuevo Lead',
-      archived: false,
-      quoteData: {
-        clientName: 'Marcos Repuestos',
-        phone: '5491145678901',
-        product: 'Ópticas y faros de camión',
-        hscode: '8512.20.10',
-        incoterm: 'FOB',
-        goodsValue: '1850',
-        weightKg: '120',
-        cbm: '1.1',
-        shippingMode: 'maritimo_cbm',
-        notes: 'Verificar si el proveedor entrega directo en nuestro galpón.'
-      },
-      messages: [
-        { id: 201, sender: 'client', text: 'Ariel me pasó tu contacto. Tengo 2 pallets listos en Ningbo.', time: 'Ayer 18:40' }
-      ]
-    },
-    {
-      id: 3,
-      name: 'TecnoGlobal S.A.S.',
-      phone: '5493519876543',
-      lastMessage: 'Impecable la cotización, ya coordinamos el pago del flete.',
-      time: '02/09',
-      status: 'Esperando Pago',
-      archived: false,
-      quoteData: {
-        clientName: 'TecnoGlobal S.A.S.',
-        phone: '5493519876543',
-        product: 'Módulos LCD y repuestos celulares',
-        hscode: '8529.90.20',
-        incoterm: 'EXW',
-        goodsValue: '3100',
-        weightKg: '25',
-        cbm: '0.15',
-        shippingMode: 'courier_aereo',
-        notes: 'Urgente vía courier.'
-      },
-      messages: [
-        { id: 301, sender: 'me', text: 'Te adjunto la proforma final con impuestos incluidos.', time: '02/09 09:10' },
-        { id: 302, sender: 'client', text: 'Impecable la cotización, ya coordinamos el pago del flete.', time: '02/09 09:45' }
-      ]
-    }
-  ]);
-
-  const [selectedId, setSelectedId] = useState(1);
-  const selectedConv = conversations.find((c) => c.id === selectedId) || conversations[0];
-
-  const [formData, setFormData] = useState(selectedConv?.quoteData);
+  const [conversations, setConversations] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [formData, setFormData] = useState({});
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
+
+  // Sincronización automática periódica con el backend (Polling cada 3 segundos)
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const res = await fetch('/api/whatsapp-webhook');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setConversations(data);
+            if (!selectedId) {
+              setSelectedId(data[0].id);
+              setFormData(data[0].quoteData);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error al sincronizar CRM:', err);
+      }
+    };
+
+    fetchConversations();
+    const interval = setInterval(fetchConversations, 3000);
+    return () => clearInterval(interval);
+  }, [selectedId]);
+
+  const selectedConv = conversations.find((c) => c.id === selectedId) || conversations[0] || {
+    messages: [],
+    quoteData: {}
+  };
 
   const handleSelectConversation = (conv) => {
     setSelectedId(conv.id);
@@ -109,8 +60,8 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Disparador de Sol AI con informe técnico detallado de error
   const handleTriggerSolAI = async () => {
+    if (!selectedConv.messages || selectedConv.messages.length === 0) return;
     setLoadingAi(true);
     try {
       const res = await fetch('/api/ai-extract', {
@@ -120,7 +71,7 @@ export default function ModuloVentasCRM() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error desconocido al invocar a Sol');
+      if (!res.ok) throw new Error(data.error || 'Error en Sol AI');
 
       if (data.extractedData) {
         const mergedData = {
@@ -200,7 +151,7 @@ export default function ModuloVentasCRM() {
     setConversations((prev) =>
       prev.map((c) =>
         c.id === selectedId
-          ? { ...c, lastMessage: inputReply, messages: [...c.messages, newMsg] }
+          ? { ...c, lastMessage: inputReply, messages: [...(c.messages || []), newMsg] }
           : c
       )
     );
@@ -327,7 +278,7 @@ export default function ModuloVentasCRM() {
                     }}
                   >
                     <div style={styles.chatAvatar}>
-                      {conv.name.charAt(0).toUpperCase()}
+                      {(conv.name || 'C').charAt(0).toUpperCase()}
                     </div>
 
                     <div style={styles.chatContentBox}>
@@ -378,16 +329,16 @@ export default function ModuloVentasCRM() {
           <section style={styles.colChat}>
             <div style={styles.chatWindowHeader}>
               <div>
-                <h3 style={styles.chatTargetName}>{selectedConv?.name}</h3>
-                <span style={styles.chatTargetPhone}>+{selectedConv?.phone}</span>
+                <h3 style={styles.chatTargetName}>{selectedConv?.name || 'Seleccione un chat'}</h3>
+                {selectedConv?.phone && <span style={styles.chatTargetPhone}>+{selectedConv.phone}</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={styles.tagStatusRight}>{selectedConv?.status}</div>
+                <div style={styles.tagStatusRight}>{selectedConv?.status || 'Lead'}</div>
               </div>
             </div>
 
             <div style={styles.chatMessagesArea}>
-              {selectedConv?.messages.map((m) => (
+              {(selectedConv?.messages || []).map((m) => (
                 <div
                   key={m.id}
                   style={{
@@ -421,10 +372,9 @@ export default function ModuloVentasCRM() {
             <div style={styles.formHeader}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
-                <span style={styles.badgeAiReady}>Gemini 1.5 Flash</span>
+                <span style={styles.badgeAiReady}>Sol Activa</span>
               </div>
 
-              {/* BOTÓN DISPARADOR SOL IA */}
               <button
                 type="button"
                 onClick={handleTriggerSolAI}
@@ -560,7 +510,7 @@ export default function ModuloVentasCRM() {
               <button
                 type="button"
                 style={styles.btnActionQuote}
-                onClick={() => alert('Ficha de cotización guardada.')}
+                onClick={() => alert('Ficha guardada.')}
               >
                 💾 Guardar Ficha
               </button>
@@ -667,25 +617,6 @@ export default function ModuloVentasCRM() {
                   <p style={{ margin: 0, fontSize: '13px', color: '#f1f5f9', fontStyle: 'italic' }}>
                     "{selectedConv.lastMessage}"
                   </p>
-                </div>
-
-                <div style={styles.cargoSummaryGrid}>
-                  <div style={styles.cargoSummaryItem}>
-                    <span style={styles.cargoLabel}>PRODUCTO</span>
-                    <strong style={styles.cargoVal}>{selectedConv.quoteData.product}</strong>
-                  </div>
-                  <div style={styles.cargoSummaryItem}>
-                    <span style={styles.cargoLabel}>POSICIÓN ARANCELARIA</span>
-                    <strong style={styles.cargoVal}>{selectedConv.quoteData.hscode}</strong>
-                  </div>
-                  <div style={styles.cargoSummaryItem}>
-                    <span style={styles.cargoLabel}>MODALIDAD</span>
-                    <strong style={styles.cargoVal}>{selectedConv.quoteData.shippingMode}</strong>
-                  </div>
-                  <div style={styles.cargoSummaryItem}>
-                    <span style={styles.cargoLabel}>FOB DECLARADO</span>
-                    <strong style={styles.cargoVal}>USD {selectedConv.quoteData.goodsValue}</strong>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1233,27 +1164,5 @@ const styles = {
     borderRadius: '6px',
     padding: '14px',
     marginBottom: '20px'
-  },
-  cargoSummaryGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-    gap: '12px'
-  },
-  cargoSummaryItem: {
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
-    padding: '12px',
-    borderRadius: '6px'
-  },
-  cargoLabel: {
-    display: 'block',
-    fontSize: '9.5px',
-    color: '#94a3b8',
-    fontWeight: 'bold',
-    marginBottom: '4px'
-  },
-  cargoVal: {
-    fontSize: '13px',
-    color: '#ffffff'
   }
 };
