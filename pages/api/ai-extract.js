@@ -67,8 +67,8 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
     });
   }
 
-  // Modelos actualizados recomendados por la API
-  const candidateModels = ["gemini-3.1-pro-preview", "gemini-2.5-flash"];
+  // Modelo exacto solicitado por la API de Google
+  const candidateModels = ["gemini-3.6-flash", "gemini-3.1-pro-preview"];
   let lastErrorDetail = "";
 
   for (const model of candidateModels) {
