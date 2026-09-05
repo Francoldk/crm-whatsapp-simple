@@ -21,7 +21,7 @@ REGLAS:
 HISTORIAL:
 ${JSON.stringify(conversationHistory)}
 
-RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin markdown, sin \`\`\`json) con esta estructura:
+RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, sin \`\`\`json) con esta estructura:
 {
   "replyMessage": "Mensaje de WhatsApp para el cliente orientado al cierre",
   "suggestedStatus": "Nuevo Lead",
@@ -39,35 +39,40 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin markdown, sin \`\`\`json) con 
 }
 `;
 
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  // Lista de modelos ordenados por prioridad en caso de saturación
+  const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
-      })
-    });
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const data = await response.json();
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(data.error?.message || "Error devuelto por la API de Google");
+      const data = await response.json();
+
+      if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const rawText = data.candidates[0].content.parts[0].text;
+        const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+        return res.status(200).json(JSON.parse(cleanedText));
+      }
+
+      // Si Google responde que el modelo está sobrecargado (high demand / 503), continúa al siguiente
+      console.warn(`Modelo ${model} no disponible o con sobrecarga, intentando respaldo...`);
+    } catch (e) {
+      console.error(`Error consultando ${model}:`, e.message);
     }
-
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) throw new Error("Google no devolvió contenido de texto");
-
-    const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsedData = JSON.parse(cleanedText);
-
-    return res.status(200).json(parsedData);
-  } catch (error) {
-    console.error("Error en Sol AI:", error);
-    return res.status(500).json({ error: error.message || "Error procesando con Sol AI" });
   }
+
+  return res.status(503).json({
+    error: "Los servidores de IA están con alta demanda en este momento. Por favor probá en unos segundos."
+  });
 }
