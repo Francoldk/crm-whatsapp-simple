@@ -45,9 +45,9 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO con este esquema exacto:
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Usamos el alias latest compatible con el endpoint v1beta
+    // Versión fija compatible con la API
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash-002",
       generationConfig: { responseMimeType: "application/json" }
     });
 
