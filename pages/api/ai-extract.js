@@ -24,7 +24,7 @@ REGLAS:
 HISTORIAL:
 ${JSON.stringify(conversationHistory)}
 
-RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO con este esquema:
+RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO con este esquema exacto:
 {
   "replyMessage": "Mensaje de WhatsApp para el cliente orientado al cierre",
   "suggestedStatus": "Nuevo Lead" | "Cotización Pendiente" | "Cotizado" | "Esperando Pago" | "Cerrado",
@@ -44,8 +44,10 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO con este esquema:
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
+    
+    // Usamos el alias latest compatible con el endpoint v1beta
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash-latest",
       generationConfig: { responseMimeType: "application/json" }
     });
 
