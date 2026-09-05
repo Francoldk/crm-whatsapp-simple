@@ -67,8 +67,8 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
     });
   }
 
-  // Modelos oficiales y activos
-  const candidateModels = ["gemini-2.5-flash", "gemini-2.5-pro"];
+  // Modelos actualizados recomendados por la API
+  const candidateModels = ["gemini-3.1-pro-preview", "gemini-2.5-flash"];
   let lastErrorDetail = "";
 
   for (const model of candidateModels) {
@@ -96,7 +96,7 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
       console.warn(`Fallo con ${model}:`, lastErrorDetail);
     } catch (e) {
       lastErrorDetail = e.message;
-      console.error(`Error de red con ${model}:`, e.message);
+      console.error(`Error con ${model}:`, e.message);
     }
   }
 
