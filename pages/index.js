@@ -12,7 +12,7 @@ export default function ModuloVentasCRM() {
 
   const chatBottomRef = useRef(null);
 
-  // Polling cada 3 segundos para traer novedades del backend
+  // Polling cada 3 segundos para sincronizar novedades
   useEffect(() => {
     const fetchConversations = async () => {
       try {
@@ -21,7 +21,6 @@ export default function ModuloVentasCRM() {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
             setConversations(data);
-            // Si no hay ninguno seleccionado, seleccionamos el primero
             if (!selectedId) {
               setSelectedId(String(data[0].id));
               setFormData(data[0].quoteData || {});
@@ -38,12 +37,12 @@ export default function ModuloVentasCRM() {
     return () => clearInterval(interval);
   }, [selectedId]);
 
-  // Conversación activa actual
+  // Conversación seleccionada activa
   const selectedConv = conversations.find(
     (c) => String(c.id) === String(selectedId)
   ) || conversations[0] || { messages: [], quoteData: {}, botActive: true };
 
-  // Auto-scroll al final del chat cada vez que cambien los mensajes
+  // Baja automáticamente al último mensaje
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedConv?.messages]);
@@ -53,19 +52,17 @@ export default function ModuloVentasCRM() {
     setFormData(conv.quoteData || {});
   };
 
-  // Toggle individual para pausar o activar a Sol en este chat
+  // Activar o pausar Sol en este chat específico
   const handleToggleBotIndividual = async () => {
     if (!selectedConv?.phone) return;
     const nextState = !(selectedConv.botActive !== false);
 
-    // Actualización visual inmediata
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId) ? { ...c, botActive: nextState } : c
       )
     );
 
-    // Guardar en backend
     try {
       await fetch('/api/whatsapp-webhook', {
         method: 'PATCH',
@@ -73,7 +70,7 @@ export default function ModuloVentasCRM() {
         body: JSON.stringify({ phone: selectedConv.phone, botActive: nextState })
       });
     } catch (e) {
-      console.error('Error al guardar estado de Sol:', e);
+      console.error('Error toggle Sol:', e);
     }
   };
 
@@ -219,6 +216,23 @@ export default function ModuloVentasCRM() {
 
   return (
     <div style={styles.container}>
+      {/* Estilo CSS inyectado para obligar a que la barra de scroll sea visible */}
+      <style jsx global>{`
+        .custom-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+          background: #0f172a;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+          background: #334155;
+          border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+          background: #881337;
+        }
+      `}</style>
+
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
           <img src="/logo.png" alt="De China Al Mundo" style={styles.logoImg} />
@@ -249,7 +263,7 @@ export default function ModuloVentasCRM() {
 
       {activeTab === 'inbox' && (
         <main style={styles.mainGrid}>
-          {/* COLUMNA 1: LISTADO DE CHATS */}
+          {/* COLUMNA 1: LISTA DE CHATS */}
           <aside style={styles.colInbox}>
             <div style={styles.inboxHeader}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -273,7 +287,7 @@ export default function ModuloVentasCRM() {
               </div>
             </div>
 
-            <div style={styles.chatScrollList}>
+            <div className="custom-scroll" style={styles.chatScrollList}>
               {displayedConversations.length === 0 && (
                 <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
                   No hay conversaciones en esta sección.
@@ -345,7 +359,7 @@ export default function ModuloVentasCRM() {
             </div>
           </aside>
 
-          {/* COLUMNA 2: CHAT ACTIVO CON SCROLL AUTOMÁTICO */}
+          {/* COLUMNA 2: CHAT ACTIVO CON SCROLL VISIBLE Y FLEXIBLE */}
           <section style={styles.colChat}>
             <div style={styles.chatWindowHeader}>
               <div>
@@ -373,7 +387,8 @@ export default function ModuloVentasCRM() {
               </div>
             </div>
 
-            <div style={styles.chatMessagesArea}>
+            {/* ZONA DE MENSAJES CON SCROLL FORZADO Y VISIBLE */}
+            <div className="custom-scroll" style={styles.chatMessagesArea}>
               {(selectedConv?.messages || []).map((m) => (
                 <div
                   key={m.id}
@@ -426,7 +441,7 @@ export default function ModuloVentasCRM() {
               </button>
             </div>
 
-            <div style={styles.formScroll}>
+            <div className="custom-scroll" style={styles.formScroll}>
               <div style={styles.fieldItem}>
                 <label style={styles.fieldLabel}>Cliente / Razón Social:</label>
                 <input
@@ -579,7 +594,7 @@ export default function ModuloVentasCRM() {
           </div>
 
           <div style={styles.estadosBodyGrid}>
-            <div style={styles.estadosColList}>
+            <div className="custom-scroll" style={styles.estadosColList}>
               {filteredByStatus.map((conv) => {
                 const isSelected = String(conv.id) === String(selectedId);
                 return (
@@ -605,7 +620,7 @@ export default function ModuloVentasCRM() {
               })}
             </div>
 
-            <div style={styles.estadosColDetail}>
+            <div className="custom-scroll" style={styles.estadosColDetail}>
               <div style={styles.cardDetailEstado}>
                 <div style={styles.cardDetailHeader}>
                   <div>
@@ -737,18 +752,21 @@ const styles = {
     flex: 1,
     display: 'grid',
     gridTemplateColumns: '340px 1fr 390px',
+    minHeight: 0, // Clave para que las columnas hijas permitan scroll
     overflow: 'hidden'
   },
   colInbox: {
     borderRight: '1px solid #1e293b',
     backgroundColor: '#0b1120',
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    minHeight: 0
   },
   inboxHeader: {
     padding: '12px 14px',
     borderBottom: '1px solid #1e293b',
-    backgroundColor: '#0f172a'
+    backgroundColor: '#0f172a',
+    flexShrink: 0
   },
   inboxTitle: {
     fontSize: '12px',
@@ -782,7 +800,8 @@ const styles = {
   },
   chatScrollList: {
     flex: 1,
-    overflowY: 'auto'
+    overflowY: 'auto',
+    minHeight: 0
   },
   chatItemCard: {
     display: 'flex',
@@ -869,7 +888,10 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: '#070b12',
-    borderRight: '1px solid #1e293b'
+    borderRight: '1px solid #1e293b',
+    height: '100%',
+    minHeight: 0, // Clave para permitir scroll
+    overflow: 'hidden'
   },
   chatWindowHeader: {
     padding: '12px 18px',
@@ -877,7 +899,8 @@ const styles = {
     borderBottom: '1px solid #1e293b',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexShrink: 0
   },
   chatTargetName: {
     margin: 0,
@@ -898,7 +921,8 @@ const styles = {
   },
   chatMessagesArea: {
     flex: 1,
-    overflowY: 'auto',
+    overflowY: 'scroll', // Fuerza la existencia de la barra de desplazamiento
+    minHeight: 0, // Permite encogerse para activar el scrollbar
     padding: '20px',
     display: 'flex',
     flexDirection: 'column',
@@ -923,7 +947,8 @@ const styles = {
     backgroundColor: '#0f172a',
     borderTop: '1px solid #1e293b',
     display: 'flex',
-    gap: '10px'
+    gap: '10px',
+    flexShrink: 0
   },
   inputMessage: {
     flex: 1,
@@ -948,11 +973,13 @@ const styles = {
     backgroundColor: '#0f172a',
     display: 'flex',
     flexDirection: 'column',
+    minHeight: 0,
     overflow: 'hidden'
   },
   formHeader: {
     padding: '14px 18px',
-    borderBottom: '1px solid #1e293b'
+    borderBottom: '1px solid #1e293b',
+    flexShrink: 0
   },
   formTitle: {
     fontSize: '12px',
@@ -983,6 +1010,7 @@ const styles = {
   formScroll: {
     flex: 1,
     overflowY: 'auto',
+    minHeight: 0,
     padding: '16px 18px',
     display: 'flex',
     flexDirection: 'column',
@@ -1060,13 +1088,15 @@ const styles = {
     flexDirection: 'column',
     padding: '20px',
     gap: '16px',
+    minHeight: 0,
     overflow: 'hidden'
   },
   filterButtonGroup: {
     display: 'flex',
     gap: '8px',
     overflowX: 'auto',
-    paddingBottom: '4px'
+    paddingBottom: '4px',
+    flexShrink: 0
   },
   filterBtn: {
     backgroundColor: '#1e293b',
@@ -1095,6 +1125,7 @@ const styles = {
     display: 'grid',
     gridTemplateColumns: '320px 1fr',
     gap: '16px',
+    minHeight: 0,
     overflow: 'hidden'
   },
   estadosColList: {
@@ -1105,7 +1136,8 @@ const styles = {
     backgroundColor: '#0b1120',
     padding: '12px',
     borderRadius: '8px',
-    border: '1px solid #1e293b'
+    border: '1px solid #1e293b',
+    minHeight: 0
   },
   estadoContactButton: {
     display: 'flex',
@@ -1123,7 +1155,8 @@ const styles = {
     borderRadius: '8px',
     border: '1px solid #1e293b',
     padding: '24px',
-    overflowY: 'auto'
+    overflowY: 'auto',
+    minHeight: 0
   },
   cardDetailEstado: {
     maxWidth: '750px',
