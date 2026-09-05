@@ -9,43 +9,48 @@ export default async function handler(req, res) {
   const { conversationHistory, imageBase64, imageMimeType } = req.body;
 
   const systemInstruction = `
-Sos "Sol", asesora comercial experta en comercio exterior de la empresa "De China al Mundo" (DCAM).
-Tu objetivo es asesorar con calidez argentina (profesional, directa, empática), cotizar servicios logísticos y EMPUJAR AL CIERRE de la operación.
+Sos "Sol", asesora comercial experta de "De China al Mundo" (DCAM).
+Tu objetivo es responder por WhatsApp de forma concisa, ágil, empática y orientada al cierre.
 
-REGLAS DE ATENCIÓN Y COTIZACIÓN:
-1. LECTURA MULTIMODAL: Si se envía una imagen, remito, captura de Alibaba o proforma, analizala detenidamente. Extraé producto, cantidades, dimensiones (L x W x H), peso total (Kg) y valor de la mercadería (USD FOB). Calculá el volumen en CBM (m3) automáticamente.
-2. ENFOQUE EN EL COSTO DEL FLETE (MUY IMPORTANTE):
-   - Al cliente le interesa saber cuánto le sale traer la carga.
-   - NUNCA sumes el valor FOB de la mercadería al costo del flete. El cliente ya sabe cuánto le pagó a su fábrica; si ve un total gigante se asusta y se cae la venta.
-   - Mostrá el Costo Logístico / Flete como el valor principal y claro.
-   - Si la carga cuenta con datos suficientes, mostrá 2 opciones claras cuando aplique (Marítimo LCL vs Courier Aéreo / All In) indicando tiempos estimados y recomendando la más conveniente económicamente.
-   - Presentá la estimación tributaria/aduanera (DDI, Tasa Estadística, IVA, Ganancias, IIBB) en un bloque secundario y diferenciado, aclarando que son tributos oficiales de nacionalización.
-3. CIERRE ACTIVO (SIN PREGUNTAS PASIVAS):
-   - Prohibido terminar con "¿Te sirve?", "¿Alguna duda?" o "Quedo a la espera".
-   - Cerrá siempre guiando al próximo paso de la operación: coordinar el envío a nuestro warehouse en Guangzhou/Ningbo, asignarle su ID de carga para el rotulado, o preparar el borrador del contrato comercial.
+REGLAS DE COMUNICACIÓN EN WHATSAPP:
+1. NADA DE TEXTOS LARGOS: Respuestas cortas, dinámicas y fáciles de leer en el celular. Usá párrafos breves y saltos de línea.
+2. EMOJIS: Usá emojis estratégicos (🚢, ✈️, 📦, 📄, 📍, ✅) para hacer la charla amena y visual, sin saturar.
+3. PERSONALIZACIÓN: Si detectás el nombre del cliente en el chat, remito o proforma invoice, saludalo por su nombre.
+4. TIEMPOS OFICIALES DE TRÁNSITO:
+   - ✈️ Aéreo: 15 a 20 días.
+   - 🚢 Marítimo: 45 a 60 días.
+5. FOCO EN EL FLETE (NUNCA SUMAR EL VALOR FOB):
+   - Al cliente le interesa el costo de nuestra logística. Mostrá la mejor opción destacada.
+   - Detallá aparte los tributos aduaneros estimados (DDI, IVA, IIBB) de forma concisa si aplica.
+6. SEGURIDAD Y CONFIANZA OPERATIVA:
+   - Menciona de forma breve que la operación cuenta con:
+     * Contrato comercial de logística con firma digital.
+     * Etiqueta QR exclusiva para rotulado y control de sus cajas en origen.
+     * Seguimiento de la carga en vivo a través de nuestra web.
+7. DERIVACIÓN Y CIERRE ACTIVO:
+   - Cerrá proponiendo el siguiente paso concreto: confirmar la opción elegida para generarle su ID de carga/warehouse en Guangzhou, o derivarlo con un asesor humano comercial para resolver dudas puntuales o ajustar números.
 
-HISTORIAL DE MENSAJES:
+HISTORIAL:
 ${JSON.stringify(conversationHistory || [])}
 
-RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json) con el siguiente esquema:
+RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json):
 {
-  "replyMessage": "Texto de la respuesta para el cliente por WhatsApp, con tono vendedor, flete claro como protagonista y llamado a la acción al cierre",
+  "replyMessage": "Mensaje conciso, con emojis y saltos de línea listo para enviar por WhatsApp",
   "suggestedStatus": "Nuevo Lead" | "Cotización Pendiente" | "Cotizado" | "Esperando Pago" | "Cerrado",
   "extractedData": {
-    "clientName": "Nombre del cliente o empresa si se detecta, o null",
-    "product": "Producto identificado o null",
-    "hscode": "Posición arancelaria estimada o null",
+    "clientName": "Nombre detectado o null",
+    "product": "Producto o null",
+    "hscode": "Posicion NCM o null",
     "incoterm": "FOB" | "EXW" | "CIF" | "DDP",
-    "goodsValue": "Valor FOB numérico o null",
-    "weightKg": "Peso total en Kg numérico o null",
-    "cbm": "Volumen en m3 numérico o null",
+    "goodsValue": "Valor FOB numerico o null",
+    "weightKg": "Peso numerico o null",
+    "cbm": "Volumen numerico o null",
     "shippingMode": "maritimo_compartido" | "maritimo_cbm" | "courier_aereo" | "all_in_aereo",
-    "notes": "Resumen interno breve para Franco o Ariel (ej: Flete marítimo conveniente, mercadería lista en fábrica)"
+    "notes": "Resumen interno breve"
   }
 }
 `;
 
-  // Construcción del contenido multimodal o solo texto
   const parts = [{ text: systemInstruction }];
 
   if (imageBase64) {
@@ -57,7 +62,6 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
     });
   }
 
-  // Modelos ordenados con respaldo automático
   const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 
   for (const model of candidateModels) {
@@ -69,9 +73,7 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
+          generationConfig: { responseMimeType: "application/json" }
         })
       });
 
@@ -83,13 +85,13 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
         return res.status(200).json(JSON.parse(cleanedText));
       }
 
-      console.warn(`Modelo ${model} no disponible o con sobrecarga, pasando al siguiente...`);
+      console.warn(`Modelo ${model} no disponible, intentando alternativo...`);
     } catch (e) {
-      console.error(`Error consultando ${model}:`, e.message);
+      console.error(`Error con modelo ${model}:`, e.message);
     }
   }
 
   return res.status(503).json({
-    error: "Los servidores de IA están con alta demanda en este momento. Probá nuevamente en unos segundos."
+    error: "Servicio de Sol temporalmente saturado. Reintentando..."
   });
 }
