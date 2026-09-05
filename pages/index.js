@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function ModuloVentasCRM() {
   const [activeTab, setActiveTab] = useState('inbox');
-  const [solActive, setSolActive] = useState(true);
   const [inboxFilter, setInboxFilter] = useState('activos');
   const [loadingAi, setLoadingAi] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -11,7 +10,9 @@ export default function ModuloVentasCRM() {
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
 
-  // Sincronización automática periódica con el backend (Polling cada 3 segundos)
+  const chatBottomRef = useRef(null);
+
+  // Polling cada 3 segundos para traer novedades del backend
   useEffect(() => {
     const fetchConversations = async () => {
       try {
@@ -20,9 +21,10 @@ export default function ModuloVentasCRM() {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
             setConversations(data);
+            // Si no hay ninguno seleccionado, seleccionamos el primero
             if (!selectedId) {
-              setSelectedId(data[0].id);
-              setFormData(data[0].quoteData);
+              setSelectedId(String(data[0].id));
+              setFormData(data[0].quoteData || {});
             }
           }
         }
@@ -36,27 +38,60 @@ export default function ModuloVentasCRM() {
     return () => clearInterval(interval);
   }, [selectedId]);
 
-  const selectedConv = conversations.find((c) => c.id === selectedId) || conversations[0] || {
-    messages: [],
-    quoteData: {}
-  };
+  // Conversación activa actual
+  const selectedConv = conversations.find(
+    (c) => String(c.id) === String(selectedId)
+  ) || conversations[0] || { messages: [], quoteData: {}, botActive: true };
+
+  // Auto-scroll al final del chat cada vez que cambien los mensajes
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [selectedConv?.messages]);
 
   const handleSelectConversation = (conv) => {
-    setSelectedId(conv.id);
-    setFormData(conv.quoteData);
+    setSelectedId(String(conv.id));
+    setFormData(conv.quoteData || {});
+  };
+
+  // Toggle individual para pausar o activar a Sol en este chat
+  const handleToggleBotIndividual = async () => {
+    if (!selectedConv?.phone) return;
+    const nextState = !(selectedConv.botActive !== false);
+
+    // Actualización visual inmediata
+    setConversations((prev) =>
+      prev.map((c) =>
+        String(c.id) === String(selectedId) ? { ...c, botActive: nextState } : c
+      )
+    );
+
+    // Guardar en backend
+    try {
+      await fetch('/api/whatsapp-webhook', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: selectedConv.phone, botActive: nextState })
+      });
+    } catch (e) {
+      console.error('Error al guardar estado de Sol:', e);
+    }
   };
 
   const handleFormChange = (field, value) => {
     const updated = { ...formData, [field]: value };
     setFormData(updated);
     setConversations((prev) =>
-      prev.map((c) => (c.id === selectedId ? { ...c, quoteData: updated } : c))
+      prev.map((c) =>
+        String(c.id) === String(selectedId) ? { ...c, quoteData: updated } : c
+      )
     );
   };
 
   const handleStatusChange = (newStatus) => {
     setConversations((prev) =>
-      prev.map((c) => (c.id === selectedId ? { ...c, status: newStatus } : c))
+      prev.map((c) =>
+        String(c.id) === String(selectedId) ? { ...c, status: newStatus } : c
+      )
     );
   };
 
@@ -82,7 +117,9 @@ export default function ModuloVentasCRM() {
         };
         setFormData(mergedData);
         setConversations((prev) =>
-          prev.map((c) => (c.id === selectedId ? { ...c, quoteData: mergedData } : c))
+          prev.map((c) =>
+            String(c.id) === String(selectedId) ? { ...c, quoteData: mergedData } : c
+          )
         );
       }
 
@@ -104,18 +141,20 @@ export default function ModuloVentasCRM() {
   const handleToggleArchive = (id, e) => {
     e.stopPropagation();
     setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, archived: !c.archived } : c))
+      prev.map((c) =>
+        String(c.id) === String(id) ? { ...c, archived: !c.archived } : c
+      )
     );
   };
 
   const handleDeleteConversation = (id, e) => {
     e.stopPropagation();
     if (confirm('¿Eliminar esta conversación del CRM?')) {
-      const remaining = conversations.filter((c) => c.id !== id);
+      const remaining = conversations.filter((c) => String(c.id) !== String(id));
       setConversations(remaining);
-      if (selectedId === id && remaining.length > 0) {
-        setSelectedId(remaining[0].id);
-        setFormData(remaining[0].quoteData);
+      if (String(selectedId) === String(id) && remaining.length > 0) {
+        setSelectedId(String(remaining[0].id));
+        setFormData(remaining[0].quoteData || {});
       }
     }
   };
@@ -126,12 +165,12 @@ export default function ModuloVentasCRM() {
     if (newName && newName.trim()) {
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === id
+          String(c.id) === String(id)
             ? { ...c, name: newName.trim(), quoteData: { ...c.quoteData, clientName: newName.trim() } }
             : c
         )
       );
-      if (selectedId === id) {
+      if (String(selectedId) === String(id)) {
         setFormData((prev) => ({ ...prev, clientName: newName.trim() }));
       }
     }
@@ -150,7 +189,7 @@ export default function ModuloVentasCRM() {
 
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === selectedId
+        String(c.id) === String(selectedId)
           ? { ...c, lastMessage: inputReply, messages: [...(c.messages || []), newMsg] }
           : c
       )
@@ -176,6 +215,8 @@ export default function ModuloVentasCRM() {
       ? conversations
       : conversations.filter((c) => c.status === statusFilter);
 
+  const isSolActiveInCurrent = selectedConv?.botActive !== false;
+
   return (
     <div style={styles.container}>
       <header style={styles.topBar}>
@@ -186,33 +227,6 @@ export default function ModuloVentasCRM() {
             <h1 style={styles.systemTitle}>Módulo de Ventas & Operaciones Comex</h1>
             <span style={styles.systemSub}>Gestión de Leads, WhatsApp y Precotización</span>
           </div>
-        </div>
-
-        <div style={styles.solControlCard}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '18px' }}>☀️</span>
-            <div>
-              <div style={styles.solTitleText}>Asistente Virtual: <strong>Sol</strong></div>
-              <div style={styles.solStatusText}>
-                {solActive ? (
-                  <span style={{ color: '#34d399' }}>● Respuestas Automáticas ACTIVAS</span>
-                ) : (
-                  <span style={{ color: '#f87171' }}>○ Respuestas Automáticas EN PAUSA</span>
-                )}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSolActive(!solActive)}
-            style={{
-              ...styles.solToggleBtn,
-              backgroundColor: solActive ? '#065f46' : '#334155',
-              borderColor: solActive ? '#10b981' : '#64748b'
-            }}
-          >
-            {solActive ? 'PAUSAR SOL' : 'ACTIVAR SOL'}
-          </button>
         </div>
 
         <nav style={styles.tabNav}>
@@ -235,7 +249,7 @@ export default function ModuloVentasCRM() {
 
       {activeTab === 'inbox' && (
         <main style={styles.mainGrid}>
-          {/* COLUMNA 1: CHATS */}
+          {/* COLUMNA 1: LISTADO DE CHATS */}
           <aside style={styles.colInbox}>
             <div style={styles.inboxHeader}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -266,7 +280,8 @@ export default function ModuloVentasCRM() {
                 </div>
               )}
               {displayedConversations.map((conv) => {
-                const isSelected = conv.id === selectedId;
+                const isSelected = String(conv.id) === String(selectedId);
+                const isChatBotActive = conv.botActive !== false;
                 return (
                   <div
                     key={conv.id}
@@ -283,7 +298,12 @@ export default function ModuloVentasCRM() {
 
                     <div style={styles.chatContentBox}>
                       <div style={styles.chatTopLine}>
-                        <strong style={styles.chatName}>{conv.name}</strong>
+                        <strong style={styles.chatName}>
+                          <span style={{ fontSize: '10px', marginRight: '4px' }}>
+                            {isChatBotActive ? '🟢' : '🔴'}
+                          </span>
+                          {conv.name}
+                        </strong>
                         <span style={styles.chatTime}>{conv.time}</span>
                       </div>
                       <div style={styles.chatPhone}>+{conv.phone}</div>
@@ -325,7 +345,7 @@ export default function ModuloVentasCRM() {
             </div>
           </aside>
 
-          {/* COLUMNA 2: CHAT ACTIVO */}
+          {/* COLUMNA 2: CHAT ACTIVO CON SCROLL AUTOMÁTICO */}
           <section style={styles.colChat}>
             <div style={styles.chatWindowHeader}>
               <div>
@@ -333,6 +353,22 @@ export default function ModuloVentasCRM() {
                 {selectedConv?.phone && <span style={styles.chatTargetPhone}>+{selectedConv.phone}</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={handleToggleBotIndividual}
+                  style={{
+                    backgroundColor: isSolActiveInCurrent ? '#064e3b' : '#7f1d1d',
+                    color: isSolActiveInCurrent ? '#34d399' : '#fca5a5',
+                    border: `1px solid ${isSolActiveInCurrent ? '#059669' : '#b91c1c'}`,
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isSolActiveInCurrent ? '🤖 Sol Activa en este chat' : '⏸️ Sol Pausada (Atención Manual)'}
+                </button>
                 <div style={styles.tagStatusRight}>{selectedConv?.status || 'Lead'}</div>
               </div>
             </div>
@@ -351,6 +387,7 @@ export default function ModuloVentasCRM() {
                   <span style={styles.msgTimeTag}>{m.time}</span>
                 </div>
               ))}
+              <div ref={chatBottomRef} />
             </div>
 
             <form onSubmit={handleSendReply} style={styles.chatInputBar}>
@@ -372,7 +409,7 @@ export default function ModuloVentasCRM() {
             <div style={styles.formHeader}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
-                <span style={styles.badgeAiReady}>Sol Activa</span>
+                <span style={styles.badgeAiReady}>Motor Gemini Listo</span>
               </div>
 
               <button
@@ -419,7 +456,7 @@ export default function ModuloVentasCRM() {
                   style={styles.fieldInput}
                   value={formData?.product || ''}
                   onChange={(e) => handleFormChange('product', e.target.value)}
-                  placeholder="Ej: Neumáticos rodado 14"
+                  placeholder="Ej: Zapatillas deportivas"
                 />
               </div>
 
@@ -431,7 +468,7 @@ export default function ModuloVentasCRM() {
                     style={styles.fieldInput}
                     value={formData?.hscode || ''}
                     onChange={(e) => handleFormChange('hscode', e.target.value)}
-                    placeholder="Ej: 4011.10.00"
+                    placeholder="Ej: 6404.11.00"
                   />
                 </div>
                 <div style={styles.fieldItem}>
@@ -503,7 +540,7 @@ export default function ModuloVentasCRM() {
                   style={styles.fieldTextarea}
                   value={formData?.notes || ''}
                   onChange={(e) => handleFormChange('notes', e.target.value)}
-                  placeholder="Detalles operativos de la carga."
+                  placeholder="Detalles de la carga."
                 />
               </div>
 
@@ -544,7 +581,7 @@ export default function ModuloVentasCRM() {
           <div style={styles.estadosBodyGrid}>
             <div style={styles.estadosColList}>
               {filteredByStatus.map((conv) => {
-                const isSelected = conv.id === selectedId;
+                const isSelected = String(conv.id) === String(selectedId);
                 return (
                   <button
                     key={conv.id}
@@ -671,33 +708,6 @@ const styles = {
   systemSub: {
     fontSize: '11px',
     color: '#94a3b8'
-  },
-  solControlCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    backgroundColor: '#1e293b',
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: '1px solid #334155'
-  },
-  solTitleText: {
-    fontSize: '12px',
-    color: '#f8fafc'
-  },
-  solStatusText: {
-    fontSize: '10px',
-    fontWeight: 'bold'
-  },
-  solToggleBtn: {
-    color: '#ffffff',
-    border: '1px solid',
-    padding: '6px 12px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: '800',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
   },
   tabNav: {
     display: 'flex',
