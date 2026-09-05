@@ -1,4 +1,9 @@
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).end();
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -23,12 +28,12 @@ REGLAS DE COMUNICACIÓN EN WHATSAPP:
    - Al cliente le interesa el costo de nuestra logística. Mostrá la mejor opción destacada.
    - Detallá aparte los tributos aduaneros estimados (DDI, IVA, IIBB) de forma concisa si aplica.
 6. SEGURIDAD Y CONFIANZA OPERATIVA:
-   - Menciona de forma breve que la operación cuenta con:
+   - Mencioná de forma breve que la operación cuenta con:
      * Contrato comercial de logística con firma digital.
      * Etiqueta QR exclusiva para rotulado y control de sus cajas en origen.
      * Seguimiento de la carga en vivo a través de nuestra web.
 7. DERIVACIÓN Y CIERRE ACTIVO:
-   - Cerrá proponiendo el siguiente paso concreto: confirmar la opción elegida para generarle su ID de carga/warehouse en Guangzhou, o derivarlo con un asesor humano comercial para resolver dudas puntuales o ajustar números.
+   - Cerrá proponiendo el siguiente paso concreto: confirmar la opción elegida para generarle su ID de carga/warehouse en Guangzhou, o derivarlo con un asesor comercial para resolver dudas puntuales o ajustar números.
 
 HISTORIAL:
 ${JSON.stringify(conversationHistory || [])}
@@ -62,7 +67,9 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
     });
   }
 
-  const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+  // Modelos oficiales y activos
+  const candidateModels = ["gemini-2.5-flash", "gemini-2.5-pro"];
+  let lastErrorDetail = "";
 
   for (const model of candidateModels) {
     try {
@@ -85,13 +92,16 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO (sin bloques markdown \`\`\`json)
         return res.status(200).json(JSON.parse(cleanedText));
       }
 
-      console.warn(`Modelo ${model} no disponible, intentando alternativo...`);
+      lastErrorDetail = data.error?.message || JSON.stringify(data);
+      console.warn(`Fallo con ${model}:`, lastErrorDetail);
     } catch (e) {
-      console.error(`Error con modelo ${model}:`, e.message);
+      lastErrorDetail = e.message;
+      console.error(`Error de red con ${model}:`, e.message);
     }
   }
 
   return res.status(503).json({
-    error: "Servicio de Sol temporalmente saturado. Reintentando..."
+    error: "Servicio de Sol temporalmente saturado.",
+    details: lastErrorDetail
   });
 }
