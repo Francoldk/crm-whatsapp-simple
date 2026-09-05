@@ -40,8 +40,8 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
 `;
 
   try {
-    // Consulta directa vía REST a v1beta gemini-1.5-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Usamos el endpoint oficial de producción v1 (estable)
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -57,7 +57,23 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error?.message || "Error al invocar API de Google");
+      // Si v1 no lo toma, probamos fallback automático a gemini-2.0-flash
+      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      const fallbackData = await fallbackRes.json();
+      if (!fallbackRes.ok) {
+        throw new Error(fallbackData.error?.message || data.error?.message || "Fallo en API de Gemini");
+      }
+      const text = fallbackData.candidates?.[0]?.content?.parts?.[0]?.text;
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      return res.status(200).json(JSON.parse(cleaned));
     }
 
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -68,7 +84,7 @@ RESPONDÉ ÚNICAMENTE UN OBJETO JSON VÁLIDO (sin bloques de código markdown, s
 
     return res.status(200).json(parsedData);
   } catch (error) {
-    console.error("Error en ai-extract:", error);
+    console.error("Error en Sol AI:", error);
     return res.status(500).json({ error: error.message || "Error procesando con Sol AI" });
   }
 }
