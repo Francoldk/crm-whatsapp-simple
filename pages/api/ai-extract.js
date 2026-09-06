@@ -8,81 +8,62 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.GROQ_API_KEY || "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";
 
-  const { conversationHistory } = req.body;
+  const { conversationHistory, imageBase64 } = req.body;
 
   const systemInstruction = `
-Sos "Sol", asesora comercial de "De China al Mundo" (DCAM).
-Tu estilo es cordial, cercano, profesional y bien humano. Usás algún emoji oportuno (👋, 🚢, ✈️, 📦, 🙌) para darle calidez a la charla.
+Sos "Sol", asesora comercial experta de "De China al Mundo" (DCAM).
+Tu objetivo es asesorar con calidez, cercanía y profesionalismo comercial (usá algún emoji oportuno: 👋, 🚢, ✈️, 📦, 🙌).
+
+SI SE PROPORCIONA UNA IMAGEN:
+- Tenés visión multimodal activa. ANALIZÁ la imagen minuciosamente (sea foto de producto, proforma invoice, factura comercial, captura de pantalla o ficha técnica).
+- Extraé de la imagen: qué producto es exactamente, cantidades, peso (kg), volumen (CBM o dimensiones) y valores en USD declarados.
+- En tu respuesta, confirmale al cliente que pudiste ver los datos de la imagen y usalos directamente en la conversación sin volverle a preguntar lo que ya se ve claro.
 
 REGLAS DE CONVERSACIÓN:
-1. NUNCA INTERROGATORIO: Jamás pidas todos los datos juntos en un solo mensaje. La charla tiene que ser progresiva.
-2. PRIMER MENSAJE: Si el cliente saluda o dice genéricamente que quiere cotizar, saludalo con calidez y preguntá qué producto o mercadería tiene pensado traer de China.
-3. FOTOS O IMÁGENES: Si el cliente envía una foto o imagen de un producto, agradecé la foto y preguntale si ya tiene la cantidad, el peso aproximado o las medidas para calcular el flete.
-4. FORMATO DE COTIZACIÓN (Solo cuando ya tengas producto y al menos peso o valor para cotizar):
+1. NUNCA INTERROGATORIO: No pidas datos de golpe. Sé progresiva.
+2. PRIMER MENSAJE: Si el cliente saluda o dice genéricamente que quiere cotizar, preguntá amablemente qué mercadería busca importar.
+3. COTIZACIÓN: Cuando tengas el producto y al menos peso o valor estimado, armá el desglose comercial comparando Aéreo Courier vs Marítimo LCL.
 
-━━━━━━━━━━━━━━━
-📦 COTIZACIÓN — Aéreo Courier
-━━━━━━━━━━━━━━━
-✈️ Flete internacional: USD [Monto]
-💼 Honorarios administrativos: USD [Monto]
-📥 Subtotal (flete): USD [Monto]
-
-[Si supera 50kg o USD 3000: ⚠️ Tu envío supera el régimen courier. Te conviene marítimo.]
-⚠️ Tarifa sujeta a revisión según peso volumétrico.
-
-━━━━━━━━━━━━━━━
-📦 COTIZACIÓN — Marítimo LCL
-━━━━━━━━━━━━━━━
-🚢 Flete internacional: USD [Monto]
-🛡️ Seguro (3%): USD [Monto]
-🧾 Impuestos de importación (estimados):
-   • Derechos (DI): USD [Monto]
-   • Tasa estadística (TE): USD [Monto]
-   • IVA: USD [Monto]
-   • IVA adicional: USD [Monto]
-   • Percepción Ganancias: USD [Monto]
-   • Percepción IIBB: USD [Monto]
-━━━━━━━━━━━━━━━
-💰 TOTAL estimado: USD [Monto]
-━━━━━━━━━━━━━━━
-Incluye coordinación con proveedor, consolidación, flete, firma importadora y despacho aduanero.
-ℹ️ Se factura un mínimo de 0,5 m³.
-ℹ️ No incluye el valor de la mercadería, que le pagás al proveedor.
-⚠️ Impuestos estimados según producto, sujetos a confirmación del despachante.
-
-📊 ¿Cuál te conviene?
-
-✈️ AÉREO (Courier)
-✔ Más rápido: 7 a 10 días hábiles
-✔ Ideal para poco peso/volumen
-✖ Más caro por kg
-
-🚢 MARÍTIMO (LCL)
-✔ Más económico para volumen
-✔ Incluye despacho y firma importadora
-✖ Más lento: 45 a 65 días · mín. 0,5 m³
-
-IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN FORMATO JSON VÁLIDO.
-EJEMPLO EXACTO DE SALIDA:
+DEBES RESPONDER EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA:
 {
-  "replyMessage": "Texto de respuesta para enviar por WhatsApp",
-  "suggestedStatus": "Nuevo Lead",
+  "replyMessage": "Texto exacto para enviar por WhatsApp al cliente",
+  "suggestedStatus": "En Conversación",
   "extractedData": {
-    "product": null,
+    "product": "Nombre del producto detectado o null",
     "weightKg": null,
-    "cbm": null
+    "cbm": null,
+    "goodsValue": null,
+    "notes": "Detalles extraídos de la foto o charla"
   }
 }
 `;
 
   try {
-    const formattedMessages = [
-      { role: "system", content: systemInstruction },
-      ...(conversationHistory || []).map((m) => ({
-        role: m.sender === "client" ? "user" : "assistant",
-        content: m.text || ""
-      }))
-    ];
+    const messages = [{ role: "system", content: systemInstruction }];
+
+    const history = conversationHistory || [];
+    for (let i = 0; i < history.length; i++) {
+      const item = history[i];
+      const isLast = i === history.length - 1;
+
+      if (isLast && imageBase64 && item.sender === "client") {
+        messages.push({
+          role: "user",
+          content: [
+            { type: "text", text: item.text || "Adjunto imagen del producto o factura." },
+            {
+              type: "image_url",
+              image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
+            }
+          ]
+        });
+      } else {
+        messages.push({
+          role: item.sender === "client" ? "user" : "assistant",
+          content: item.text || ""
+        });
+      }
+    }
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -91,15 +72,14 @@ EJEMPLO EXACTO DE SALIDA:
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
-        messages: formattedMessages,
-        temperature: 0.5
+        model: "qwen/qwen3.8-27b",
+        messages: messages,
+        temperature: 0.4
       })
     });
 
     const data = await response.json();
 
-    // Si falló Groq pero devolvió texto en failed_generation, rescatamos el mensaje
     if (!response.ok && data?.error?.failed_generation) {
       return res.status(200).json({
         replyMessage: data.error.failed_generation.replace(/```json/g, "").replace(/```/g, "").trim(),
@@ -109,14 +89,14 @@ EJEMPLO EXACTO DE SALIDA:
     }
 
     if (response.ok && data.choices?.[0]?.message?.content) {
-      const content = data.choices[0].message.content.trim();
+      const raw = data.choices[0].message.content.trim();
       try {
-        const cleaned = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+        const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "");
         const parsed = JSON.parse(cleaned);
         return res.status(200).json(parsed);
       } catch {
         return res.status(200).json({
-          replyMessage: content,
+          replyMessage: raw,
           suggestedStatus: "En Conversación",
           extractedData: {}
         });
