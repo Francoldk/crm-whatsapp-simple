@@ -6,21 +6,18 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).end();
 
-  // Clave de Groq integrada directamente
   const apiKey = process.env.GROQ_API_KEY || "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";
 
   const { conversationHistory } = req.body;
 
   const systemInstruction = `
 Sos "Sol", asesora comercial de "De China al Mundo" (DCAM).
-Tu estilo es cordial, cercano, profesional y bien humano. Usás algún emoji oportuno (👋, 🚢, ✈️, 📦, 🙌) para darle calidez a la charla, sin saturar.
+Tu estilo es cordial, cercano, profesional y bien humano. Usás algún emoji oportuno (👋, 🚢, ✈️, 📦, 🙌) para darle calidez a la charla.
 
 REGLAS DE CONVERSACIÓN:
-1. NUNCA INTERROGATORIO: Jamás pidas todos los datos juntos (producto, valor, peso, volumen) en un solo mensaje. La charla tiene que ser progresiva y fluida.
-2. PRIMER MENSAJE: Si el cliente saluda o dice genéricamente que quiere cotizar, saludalo con calidez y hacé UNA SOLA pregunta: qué producto o mercadería tiene pensado traer de China.
-3. CONVERSACIÓN PASO A PASO:
-   - Una vez que te cuenta qué producto es, mostrá interés genuino y preguntale si ya tiene proveedor/factura o una idea aproximada de los kilos o volumen.
-   - Si te pasa solo kilos o valor sin producto, preguntale con naturalidad qué mercadería es para ver aranceles exactos.
+1. NUNCA INTERROGATORIO: Jamás pidas todos los datos juntos en un solo mensaje. La charla tiene que ser progresiva.
+2. PRIMER MENSAJE: Si el cliente saluda o dice genéricamente que quiere cotizar, saludalo con calidez y preguntá qué producto o mercadería tiene pensado traer de China.
+3. FOTOS O IMÁGENES: Si el cliente envía una foto o imagen de un producto, agradecé la foto y preguntale si ya tiene la cantidad, el peso aproximado o las medidas para calcular el flete.
 4. FORMATO DE COTIZACIÓN (Solo cuando ya tengas producto y al menos peso o valor para cotizar):
 
 ━━━━━━━━━━━━━━━
@@ -65,20 +62,15 @@ Incluye coordinación con proveedor, consolidación, flete, firma importadora y 
 ✔ Incluye despacho y firma importadora
 ✖ Más lento: 45 a 65 días · mín. 0,5 m³
 
-RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA (sin texto extra):
+IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN FORMATO JSON VÁLIDO.
+EJEMPLO EXACTO DE SALIDA:
 {
-  "replyMessage": "Texto a enviar por WhatsApp",
+  "replyMessage": "Texto de respuesta para enviar por WhatsApp",
   "suggestedStatus": "Nuevo Lead",
   "extractedData": {
-    "clientName": null,
     "product": null,
-    "hscode": null,
-    "incoterm": "FOB",
-    "goodsValue": null,
     "weightKg": null,
-    "cbm": null,
-    "shippingMode": "maritimo_compartido",
-    "notes": "Notas breves"
+    "cbm": null
   }
 }
 `;
@@ -101,16 +93,34 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA (sin texto ex
       body: JSON.stringify({
         model: "openai/gpt-oss-120b",
         messages: formattedMessages,
-        response_format: { type: "json_object" },
-        temperature: 0.7
+        temperature: 0.5
       })
     });
 
     const data = await response.json();
 
+    // Si falló Groq pero devolvió texto en failed_generation, rescatamos el mensaje
+    if (!response.ok && data?.error?.failed_generation) {
+      return res.status(200).json({
+        replyMessage: data.error.failed_generation.replace(/```json/g, "").replace(/```/g, "").trim(),
+        suggestedStatus: "En Conversación",
+        extractedData: {}
+      });
+    }
+
     if (response.ok && data.choices?.[0]?.message?.content) {
-      const parsed = JSON.parse(data.choices[0].message.content);
-      return res.status(200).json(parsed);
+      const content = data.choices[0].message.content.trim();
+      try {
+        const cleaned = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+        const parsed = JSON.parse(cleaned);
+        return res.status(200).json(parsed);
+      } catch {
+        return res.status(200).json({
+          replyMessage: content,
+          suggestedStatus: "En Conversación",
+          extractedData: {}
+        });
+      }
     }
 
     return res.status(502).json({ error: "Fallo de Groq", details: data });
