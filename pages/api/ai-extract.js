@@ -99,7 +99,7 @@ RESPONDÉ ESTRICTAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA (sin texto ex
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: formattedMessages,
         response_format: { type: "json_object" },
         temperature: 0.7
