@@ -9,8 +9,22 @@ export default function ModuloVentasCRM() {
   const [formData, setFormData] = useState({});
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
+  
+  // Control de vistas en celular
+  const [isMobile, setIsMobile] = useState(false);
+  const [showMobileChat, setShowMobileChat] = useState(false);
+  const [showMobileForm, setShowMobileForm] = useState(false);
 
   const chatBottomRef = useRef(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchConversations = async () => {
@@ -42,11 +56,15 @@ export default function ModuloVentasCRM() {
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConv?.messages]);
+  }, [selectedConv?.messages, showMobileChat]);
 
   const handleSelectConversation = (conv) => {
     setSelectedId(String(conv.id));
     setFormData(conv.quoteData || {});
+    if (isMobile) {
+      setShowMobileChat(true);
+      setShowMobileForm(false);
+    }
   };
 
   const handleToggleBotIndividual = async () => {
@@ -215,20 +233,28 @@ export default function ModuloVentasCRM() {
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
           <img src="/logo.png" alt="De China Al Mundo" style={styles.logoImg} />
-          <div style={styles.dividerV} />
-          <div>
-            <h1 style={styles.systemTitle}>Módulo de Ventas & Operaciones Comex</h1>
-            <span style={styles.systemSub}>Gestión de Leads, WhatsApp y Precotización</span>
-          </div>
+          {!isMobile && (
+            <>
+              <div style={styles.dividerV} />
+              <div>
+                <h1 style={styles.systemTitle}>Módulo de Ventas & Operaciones Comex</h1>
+                <span style={styles.systemSub}>Gestión de Leads, WhatsApp y Precotización</span>
+              </div>
+            </>
+          )}
         </div>
 
         <nav style={styles.tabNav}>
           <button
             type="button"
             style={activeTab === 'inbox' ? styles.tabBtnActive : styles.tabBtn}
-            onClick={() => setActiveTab('inbox')}
+            onClick={() => {
+              setActiveTab('inbox');
+              setShowMobileChat(false);
+              setShowMobileForm(false);
+            }}
           >
-            📥 Bandeja (3 Columnas)
+            📥 {isMobile ? 'Bandeja' : 'Bandeja (3 Columnas)'}
           </button>
           <button
             type="button"
@@ -241,308 +267,398 @@ export default function ModuloVentasCRM() {
       </header>
 
       {activeTab === 'inbox' && (
-        <main style={styles.mainGrid}>
-          <aside style={styles.colInbox}>
-            <div style={styles.inboxHeader}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={styles.inboxTitle}>Mensajes</span>
-                <div style={styles.archiveToggleGroup}>
-                  <button
-                    type="button"
-                    style={inboxFilter === 'activos' ? styles.btnFilterActive : styles.btnFilterInactive}
-                    onClick={() => setInboxFilter('activos')}
-                  >
-                    Activos
-                  </button>
-                  <button
-                    type="button"
-                    style={inboxFilter === 'archivados' ? styles.btnFilterActive : styles.btnFilterInactive}
-                    onClick={() => setInboxFilter('archivados')}
-                  >
-                    Archivados
-                  </button>
+        <main
+          style={{
+            ...styles.mainGrid,
+            gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 390px',
+            position: 'relative'
+          }}
+        >
+          {/* 1. LISTA DE CONTACTOS / LEADS */}
+          {(!isMobile || !showMobileChat) && (
+            <aside style={{ ...styles.colInbox, width: isMobile ? '100%' : 'auto' }}>
+              <div style={styles.inboxHeader}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={styles.inboxTitle}>Mensajes</span>
+                  <div style={styles.archiveToggleGroup}>
+                    <button
+                      type="button"
+                      style={inboxFilter === 'activos' ? styles.btnFilterActive : styles.btnFilterInactive}
+                      onClick={() => setInboxFilter('activos')}
+                    >
+                      Activos
+                    </button>
+                    <button
+                      type="button"
+                      style={inboxFilter === 'archivados' ? styles.btnFilterActive : styles.btnFilterInactive}
+                      onClick={() => setInboxFilter('archivados')}
+                    >
+                      Archivados
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div style={styles.chatScrollList}>
-              {displayedConversations.length === 0 && (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-                  No hay conversaciones en esta sección.
-                </div>
-              )}
-              {displayedConversations.map((conv) => {
-                const isSelected = String(conv.id) === String(selectedId);
-                const isChatBotActive = conv.botActive !== false;
-                return (
-                  <div
-                    key={conv.id}
-                    onClick={() => handleSelectConversation(conv)}
-                    style={{
-                      ...styles.chatItemCard,
-                      backgroundColor: isSelected ? '#1e293b' : 'transparent',
-                      borderLeft: isSelected ? '4px solid #881337' : '4px solid transparent'
-                    }}
-                  >
-                    <div style={styles.chatAvatar}>
-                      {(conv.name || 'C').charAt(0).toUpperCase()}
-                    </div>
-
-                    <div style={styles.chatContentBox}>
-                      <div style={styles.chatTopLine}>
-                        <strong style={styles.chatName}>
-                          <span style={{ fontSize: '10px', marginRight: '4px' }}>
-                            {isChatBotActive ? '🟢' : '🔴'}
-                          </span>
-                          {conv.name}
-                        </strong>
-                        <span style={styles.chatTime}>{conv.time}</span>
+              <div style={styles.chatScrollList}>
+                {displayedConversations.length === 0 && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                    No hay conversaciones en esta sección.
+                  </div>
+                )}
+                {displayedConversations.map((conv) => {
+                  const isSelected = String(conv.id) === String(selectedId);
+                  const isChatBotActive = conv.botActive !== false;
+                  return (
+                    <div
+                      key={conv.id}
+                      onClick={() => handleSelectConversation(conv)}
+                      style={{
+                        ...styles.chatItemCard,
+                        backgroundColor: isSelected && !isMobile ? '#1e293b' : 'transparent',
+                        borderLeft: isSelected && !isMobile ? '4px solid #881337' : '4px solid transparent'
+                      }}
+                    >
+                      <div style={styles.chatAvatar}>
+                        {(conv.name || 'C').charAt(0).toUpperCase()}
                       </div>
-                      <div style={styles.chatPhone}>+{conv.phone}</div>
-                      <p style={styles.chatSnippet}>{conv.lastMessage}</p>
 
-                      <div style={styles.cardFooterActions}>
-                        <span style={styles.badgeStatusMini}>{conv.status}</span>
-                        <div style={styles.actionButtonsRow}>
-                          <button
-                            type="button"
-                            title="Renombrar cliente"
-                            style={styles.btnMiniAction}
-                            onClick={(e) => handleRenameConversation(conv.id, conv.name, e)}
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            type="button"
-                            title={conv.archived ? 'Desarchivar' : 'Archivar conversación'}
-                            style={styles.btnMiniAction}
-                            onClick={(e) => handleToggleArchive(conv.id, e)}
-                          >
-                            {conv.archived ? '📤' : '📦'}
-                          </button>
-                          <button
-                            type="button"
-                            title="Borrar conversación"
-                            style={{ ...styles.btnMiniAction, color: '#f87171' }}
-                            onClick={(e) => handleDeleteConversation(conv.id, e)}
-                          >
-                            🗑️
-                          </button>
+                      <div style={styles.chatContentBox}>
+                        <div style={styles.chatTopLine}>
+                          <strong style={styles.chatName}>
+                            <span style={{ fontSize: '10px', marginRight: '4px' }}>
+                              {isChatBotActive ? '🟢' : '🔴'}
+                            </span>
+                            {conv.name}
+                          </strong>
+                          <span style={styles.chatTime}>{conv.time}</span>
+                        </div>
+                        <div style={styles.chatPhone}>+{conv.phone}</div>
+                        <p style={styles.chatSnippet}>{conv.lastMessage}</p>
+
+                        <div style={styles.cardFooterActions}>
+                          <span style={styles.badgeStatusMini}>{conv.status}</span>
+                          <div style={styles.actionButtonsRow}>
+                            <button
+                              type="button"
+                              title="Renombrar cliente"
+                              style={styles.btnMiniAction}
+                              onClick={(e) => handleRenameConversation(conv.id, conv.name, e)}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              title={conv.archived ? 'Desarchivar' : 'Archivar conversación'}
+                              style={styles.btnMiniAction}
+                              onClick={(e) => handleToggleArchive(conv.id, e)}
+                            >
+                              {conv.archived ? '📤' : '📦'}
+                            </button>
+                            <button
+                              type="button"
+                              title="Borrar conversación"
+                              style={{ ...styles.btnMiniAction, color: '#f87171' }}
+                              onClick={(e) => handleDeleteConversation(conv.id, e)}
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-
-          <section style={styles.colChat}>
-            <div style={styles.chatWindowHeader}>
-              <div>
-                <h3 style={styles.chatTargetName}>{selectedConv?.name || 'Seleccione un chat'}</h3>
-                {selectedConv?.phone && <span style={styles.chatTargetPhone}>+{selectedConv.phone}</span>}
+                  );
+                })}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            </aside>
+          )}
+
+          {/* 2. CHAT CONVERSACIONAL */}
+          {(!isMobile || showMobileChat) && (
+            <section
+              style={{
+                ...styles.colChat,
+                width: isMobile ? '100%' : 'auto',
+                display: isMobile && showMobileForm ? 'none' : 'flex'
+              }}
+            >
+              <div style={styles.chatWindowHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMobileChat(false)}
+                      style={{
+                        backgroundColor: '#1e293b',
+                        color: '#cbd5e1',
+                        border: '1px solid #334155',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ← Volver
+                    </button>
+                  )}
+                  <div>
+                    <h3 style={styles.chatTargetName}>{selectedConv?.name || 'Seleccione un chat'}</h3>
+                    {selectedConv?.phone && <span style={styles.chatTargetPhone}>+{selectedConv.phone}</span>}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMobileForm(true)}
+                      style={{
+                        backgroundColor: '#881337',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      📝 Ficha
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleToggleBotIndividual}
+                    style={{
+                      backgroundColor: isSolActiveInCurrent ? '#064e3b' : '#7f1d1d',
+                      color: isSolActiveInCurrent ? '#34d399' : '#fca5a5',
+                      border: `1px solid ${isSolActiveInCurrent ? '#059669' : '#b91c1c'}`,
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isSolActiveInCurrent ? '🤖 Sol Activa' : '⏸️ Sol Pausa'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={styles.chatMessagesArea}>
+                {(selectedConv?.messages || []).map((m) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      ...styles.msgBubble,
+                      maxWidth: isMobile ? '85%' : '65%',
+                      alignSelf: m.sender === 'me' ? 'flex-end' : 'flex-start',
+                      backgroundColor: m.sender === 'me' ? '#881337' : '#1e293b'
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.4' }}>{m.text}</p>
+                    <span style={styles.msgTimeTag}>{m.time}</span>
+                  </div>
+                ))}
+                <div ref={chatBottomRef} />
+              </div>
+
+              <form onSubmit={handleSendReply} style={styles.chatInputBar}>
+                <input
+                  type="text"
+                  placeholder="Escribí un mensaje..."
+                  value={inputReply}
+                  onChange={(e) => setInputReply(e.target.value)}
+                  style={styles.inputMessage}
+                />
+                <button type="submit" style={styles.btnSend}>
+                  Enviar
+                </button>
+              </form>
+            </section>
+          )}
+
+          {/* 3. COLUMNA DE DATOS Y COTIZACIÓN */}
+          {(!isMobile || showMobileForm) && (
+            <aside
+              style={{
+                ...styles.colForm,
+                width: isMobile ? '100%' : 'auto',
+                position: isMobile ? 'absolute' : 'relative',
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: isMobile ? 50 : 1
+              }}
+            >
+              <div style={styles.formHeader}>
+                {isMobile && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileForm(false)}
+                    style={{
+                      backgroundColor: '#1e293b',
+                      color: '#cbd5e1',
+                      border: '1px solid #334155',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      marginBottom: '10px'
+                    }}
+                  >
+                    ← Volver al Chat
+                  </button>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
+                  <span style={styles.badgeAiReady}>Sol Motor Listo</span>
+                </div>
+
                 <button
                   type="button"
-                  onClick={handleToggleBotIndividual}
+                  onClick={handleTriggerSolAI}
+                  disabled={loadingAi}
                   style={{
-                    backgroundColor: isSolActiveInCurrent ? '#064e3b' : '#7f1d1d',
-                    color: isSolActiveInCurrent ? '#34d399' : '#fca5a5',
-                    border: `1px solid ${isSolActiveInCurrent ? '#059669' : '#b91c1c'}`,
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
+                    ...styles.btnTriggerAi,
+                    opacity: loadingAi ? 0.7 : 1,
+                    cursor: loadingAi ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {isSolActiveInCurrent ? '🤖 Sol Activa en este chat' : '⏸️ Sol Pausada (Atención Manual)'}
+                  {loadingAi ? '⏳ Sol está analizando...' : '⚡ Sol: Autocompletar & Cotizar'}
                 </button>
-                <div style={styles.tagStatusRight}>{selectedConv?.status || 'Lead'}</div>
-              </div>
-            </div>
-
-            <div style={styles.chatMessagesArea}>
-              {(selectedConv?.messages || []).map((m) => (
-                <div
-                  key={m.id}
-                  style={{
-                    ...styles.msgBubble,
-                    alignSelf: m.sender === 'me' ? 'flex-end' : 'flex-start',
-                    backgroundColor: m.sender === 'me' ? '#881337' : '#1e293b'
-                  }}
-                >
-                  <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.4' }}>{m.text}</p>
-                  <span style={styles.msgTimeTag}>{m.time}</span>
-                </div>
-              ))}
-              <div ref={chatBottomRef} />
-            </div>
-
-            <form onSubmit={handleSendReply} style={styles.chatInputBar}>
-              <input
-                type="text"
-                placeholder="Escribí una respuesta o usá la sugerencia de Sol..."
-                value={inputReply}
-                onChange={(e) => setInputReply(e.target.value)}
-                style={styles.inputMessage}
-              />
-              <button type="submit" style={styles.btnSend}>
-                Enviar
-              </button>
-            </form>
-          </section>
-
-          <aside style={styles.colForm}>
-            <div style={styles.formHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
-                <span style={styles.badgeAiReady}>Motor Gemini Listo</span>
               </div>
 
-              <button
-                type="button"
-                onClick={handleTriggerSolAI}
-                disabled={loadingAi}
-                style={{
-                  ...styles.btnTriggerAi,
-                  opacity: loadingAi ? 0.7 : 1,
-                  cursor: loadingAi ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loadingAi ? '⏳ Sol está analizando el chat...' : '⚡ Sol: Autocompletar & Sugerir Cierre'}
-              </button>
-            </div>
-
-            <div style={styles.formScroll}>
-              <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Cliente / Razón Social:</label>
-                <input
-                  type="text"
-                  style={styles.fieldInput}
-                  value={formData?.clientName || ''}
-                  onChange={(e) => handleFormChange('clientName', e.target.value)}
-                  placeholder="Ej: Distribuidora SRL"
-                />
-              </div>
-
-              <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>WhatsApp de Contacto:</label>
-                <input
-                  type="text"
-                  style={styles.fieldInput}
-                  value={formData?.phone || ''}
-                  onChange={(e) => handleFormChange('phone', e.target.value)}
-                  placeholder="Ej: 549351..."
-                />
-              </div>
-
-              <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Producto / Mercadería:</label>
-                <input
-                  type="text"
-                  style={styles.fieldInput}
-                  value={formData?.product || ''}
-                  onChange={(e) => handleFormChange('product', e.target.value)}
-                  placeholder="Ej: Zapatillas deportivas"
-                />
-              </div>
-
-              <div style={styles.twoCols}>
+              <div style={styles.formScroll}>
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Posición Arancelaria (NCM):</label>
+                  <label style={styles.fieldLabel}>Cliente / Razón Social:</label>
                   <input
                     type="text"
                     style={styles.fieldInput}
-                    value={formData?.hscode || ''}
-                    onChange={(e) => handleFormChange('hscode', e.target.value)}
-                    placeholder="Ej: 6404.11.00"
+                    value={formData?.clientName || ''}
+                    onChange={(e) => handleFormChange('clientName', e.target.value)}
+                    placeholder="Ej: Martin Sanchez"
                   />
                 </div>
+
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Incoterm:</label>
+                  <label style={styles.fieldLabel}>WhatsApp de Contacto:</label>
+                  <input
+                    type="text"
+                    style={styles.fieldInput}
+                    value={formData?.phone || ''}
+                    onChange={(e) => handleFormChange('phone', e.target.value)}
+                    placeholder="Ej: 549351..."
+                  />
+                </div>
+
+                <div style={styles.fieldItem}>
+                  <label style={styles.fieldLabel}>Producto / Mercadería:</label>
+                  <input
+                    type="text"
+                    style={styles.fieldInput}
+                    value={formData?.product || ''}
+                    onChange={(e) => handleFormChange('product', e.target.value)}
+                    placeholder="Ej: Prensa Hidraulica"
+                  />
+                </div>
+
+                <div style={styles.twoCols}>
+                  <div style={styles.fieldItem}>
+                    <label style={styles.fieldLabel}>Posición Arancelaria:</label>
+                    <input
+                      type="text"
+                      style={styles.fieldInput}
+                      value={formData?.hscode || ''}
+                      onChange={(e) => handleFormChange('hscode', e.target.value)}
+                      placeholder="Ej: 9024.80.90"
+                    />
+                  </div>
+                  <div style={styles.fieldItem}>
+                    <label style={styles.fieldLabel}>Incoterm:</label>
+                    <select
+                      style={styles.fieldSelect}
+                      value={formData?.incoterm || 'FOB'}
+                      onChange={(e) => handleFormChange('incoterm', e.target.value)}
+                    >
+                      <option value="EXW">EXW</option>
+                      <option value="FOB">FOB</option>
+                      <option value="CIF">CIF</option>
+                      <option value="DDP">DDP</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={styles.threeCols}>
+                  <div style={styles.fieldItem}>
+                    <label style={styles.fieldLabel}>FOB (USD):</label>
+                    <input
+                      type="number"
+                      style={styles.fieldInput}
+                      value={formData?.goodsValue || ''}
+                      onChange={(e) => handleFormChange('goodsValue', e.target.value)}
+                      placeholder="2250"
+                    />
+                  </div>
+                  <div style={styles.fieldItem}>
+                    <label style={styles.fieldLabel}>Peso (Kg):</label>
+                    <input
+                      type="number"
+                      style={styles.fieldInput}
+                      value={formData?.weightKg || ''}
+                      onChange={(e) => handleFormChange('weightKg', e.target.value)}
+                      placeholder="150"
+                    />
+                  </div>
+                  <div style={styles.fieldItem}>
+                    <label style={styles.fieldLabel}>Volumen (m³):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      style={styles.fieldInput}
+                      value={formData?.cbm || ''}
+                      onChange={(e) => handleFormChange('cbm', e.target.value)}
+                      placeholder="0.8"
+                    />
+                  </div>
+                </div>
+
+                <div style={styles.fieldItem}>
+                  <label style={styles.fieldLabel}>Modalidad de Flete:</label>
                   <select
                     style={styles.fieldSelect}
-                    value={formData?.incoterm || 'FOB'}
-                    onChange={(e) => handleFormChange('incoterm', e.target.value)}
+                    value={formData?.shippingMode || 'maritimo_compartido'}
+                    onChange={(e) => handleFormChange('shippingMode', e.target.value)}
                   >
-                    <option value="EXW">EXW (Fábrica)</option>
-                    <option value="FOB">FOB (Puerto)</option>
-                    <option value="CIF">CIF (Destino)</option>
-                    <option value="DDP">DDP (Nacionalizado)</option>
+                    <option value="maritimo_compartido">🚢 Carga Compartida Marítima (8.5 USD/kg)</option>
+                    <option value="maritimo_cbm">📦 Carga Marítima por CBM</option>
+                    <option value="courier_aereo">✈️ Courier Aéreo (15-18 USD/kg)</option>
+                    <option value="all_in_aereo">🚀 All In Aéreo (45 USD/kg)</option>
                   </select>
                 </div>
-              </div>
 
-              <div style={styles.threeCols}>
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>FOB (USD):</label>
-                  <input
-                    type="number"
-                    style={styles.fieldInput}
-                    value={formData?.goodsValue || ''}
-                    onChange={(e) => handleFormChange('goodsValue', e.target.value)}
-                    placeholder="4000"
+                  <label style={styles.fieldLabel}>Notas Operativas:</label>
+                  <textarea
+                    style={styles.fieldTextarea}
+                    value={formData?.notes || ''}
+                    onChange={(e) => handleFormChange('notes', e.target.value)}
+                    placeholder="Detalles de la carga."
                   />
                 </div>
-                <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Peso (Kg):</label>
-                  <input
-                    type="number"
-                    style={styles.fieldInput}
-                    value={formData?.weightKg || ''}
-                    onChange={(e) => handleFormChange('weightKg', e.target.value)}
-                    placeholder="300"
-                  />
-                </div>
-                <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>Volumen (m³):</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    style={styles.fieldInput}
-                    value={formData?.cbm || ''}
-                    onChange={(e) => handleFormChange('cbm', e.target.value)}
-                    placeholder="1.5"
-                  />
-                </div>
-              </div>
 
-              <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Modalidad de Flete:</label>
-                <select
-                  style={styles.fieldSelect}
-                  value={formData?.shippingMode || 'maritimo_compartido'}
-                  onChange={(e) => handleFormChange('shippingMode', e.target.value)}
+                <button
+                  type="button"
+                  style={styles.btnActionQuote}
+                  onClick={() => alert('Ficha guardada.')}
                 >
-                  <option value="maritimo_compartido">🚢 Carga Compartida Marítima (LCL)</option>
-                  <option value="maritimo_cbm">📦 Carga Marítima por CBM</option>
-                  <option value="courier_aereo">✈️ Courier Aéreo Express</option>
-                  <option value="all_in_aereo">🚀 All In Aéreo</option>
-                </select>
+                  💾 Guardar Ficha
+                </button>
               </div>
-
-              <div style={styles.fieldItem}>
-                <label style={styles.fieldLabel}>Notas Operativas / Resumen:</label>
-                <textarea
-                  style={styles.fieldTextarea}
-                  value={formData?.notes || ''}
-                  onChange={(e) => handleFormChange('notes', e.target.value)}
-                  placeholder="Detalles de la carga."
-                />
-              </div>
-
-              <button
-                type="button"
-                style={styles.btnActionQuote}
-                onClick={() => alert('Ficha guardada.')}
-              >
-                💾 Guardar Ficha
-              </button>
-            </div>
-          </aside>
+            </aside>
+          )}
         </main>
       )}
 
@@ -568,7 +684,12 @@ export default function ModuloVentasCRM() {
             ))}
           </div>
 
-          <div style={styles.estadosBodyGrid}>
+          <div
+            style={{
+              ...styles.estadosBodyGrid,
+              gridTemplateColumns: isMobile ? '1fr' : '320px 1fr'
+            }}
+          >
             <div style={styles.estadosColList}>
               {filteredByStatus.map((conv) => {
                 const isSelected = String(conv.id) === String(selectedId);
@@ -595,58 +716,60 @@ export default function ModuloVentasCRM() {
               })}
             </div>
 
-            <div style={styles.estadosColDetail}>
-              <div style={styles.cardDetailEstado}>
-                <div style={styles.cardDetailHeader}>
-                  <div>
-                    <h2 style={{ margin: 0, fontSize: '18px', color: '#fff' }}>
-                      {selectedConv.name}
-                    </h2>
-                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      WhatsApp: +{selectedConv.phone} | Último contacto: {selectedConv.time}
-                    </span>
+            {(!isMobile || selectedId) && (
+              <div style={styles.estadosColDetail}>
+                <div style={styles.cardDetailEstado}>
+                  <div style={styles.cardDetailHeader}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '18px', color: '#fff' }}>
+                        {selectedConv.name}
+                      </h2>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        WhatsApp: +{selectedConv.phone} | Contacto: {selectedConv.time}
+                      </span>
+                    </div>
+                    <div style={styles.statusCurrentBox}>
+                      <span style={{ fontSize: '11px', color: '#cbd5e1' }}>Estado:</span>
+                      <strong style={{ color: '#fbbf24', fontSize: '14px', display: 'block' }}>
+                        {selectedConv.status}
+                      </strong>
+                    </div>
                   </div>
-                  <div style={styles.statusCurrentBox}>
-                    <span style={{ fontSize: '11px', color: '#cbd5e1' }}>Estado Actual:</span>
-                    <strong style={{ color: '#fbbf24', fontSize: '14px', display: 'block' }}>
-                      {selectedConv.status}
-                    </strong>
+
+                  <hr style={styles.hr} />
+
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={styles.fieldLabel}>Cambiar Estado:</label>
+                    <div style={styles.stateSelectorGrid}>
+                      {estadosDisponibles.map((estado) => (
+                        <button
+                          key={estado}
+                          type="button"
+                          onClick={() => handleStatusChange(estado)}
+                          style={
+                            selectedConv.status === estado
+                              ? styles.stateBtnSelected
+                              : styles.stateBtnOption
+                          }
+                        >
+                          {selectedConv.status === estado ? '✓ ' : ''}
+                          {estado}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <hr style={styles.hr} />
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={styles.fieldLabel}>Cambiar Estado con un Clic:</label>
-                  <div style={styles.stateSelectorGrid}>
-                    {estadosDisponibles.map((estado) => (
-                      <button
-                        key={estado}
-                        type="button"
-                        onClick={() => handleStatusChange(estado)}
-                        style={
-                          selectedConv.status === estado
-                            ? styles.stateBtnSelected
-                            : styles.stateBtnOption
-                        }
-                      >
-                        {selectedConv.status === estado ? '✓ ' : ''}
-                        {estado}
-                      </button>
-                    ))}
+                  <div style={styles.summaryBox}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#cbd5e1' }}>
+                      ÚLTIMO MENSAJE REGISTRADO:
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#f1f5f9', fontStyle: 'italic' }}>
+                      "{selectedConv.lastMessage}"
+                    </p>
                   </div>
-                </div>
-
-                <div style={styles.summaryBox}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#cbd5e1' }}>
-                    ÚLTIMO MENSAJE REGISTRADO:
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#f1f5f9', fontStyle: 'italic' }}>
-                    "{selectedConv.lastMessage}"
-                  </p>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
       )}
@@ -665,51 +788,50 @@ const styles = {
     overflow: 'hidden'
   },
   topBar: {
-    height: '65px',
+    height: '60px',
     backgroundColor: '#0f172a',
     borderBottom: '1px solid #1e293b',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 20px',
+    padding: '0 14px',
     flexShrink: 0
   },
   brandingBox: {
     display: 'flex',
     alignItems: 'center',
-    gap: '14px'
+    gap: '10px'
   },
   logoImg: {
-    height: '38px',
+    height: '32px',
     objectFit: 'contain'
   },
   dividerV: {
     width: '1.5px',
-    height: '30px',
+    height: '24px',
     backgroundColor: '#334155'
   },
   systemTitle: {
-    fontSize: '15px',
+    fontSize: '14px',
     fontWeight: '800',
     color: '#ffffff',
-    margin: 0,
-    letterSpacing: '0.3px'
+    margin: 0
   },
   systemSub: {
-    fontSize: '11px',
+    fontSize: '10px',
     color: '#94a3b8'
   },
   tabNav: {
     display: 'flex',
-    gap: '8px'
+    gap: '6px'
   },
   tabBtn: {
     backgroundColor: '#1e293b',
     color: '#94a3b8',
     border: '1px solid #334155',
-    padding: '8px 14px',
+    padding: '6px 10px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer'
   },
@@ -717,16 +839,15 @@ const styles = {
     backgroundColor: '#881337',
     color: '#ffffff',
     border: '1px solid #9f1239',
-    padding: '8px 14px',
+    padding: '6px 10px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer'
   },
   mainGrid: {
     flex: 1,
     display: 'grid',
-    gridTemplateColumns: '340px 1fr 390px',
     minHeight: 0,
     overflow: 'hidden'
   },
@@ -735,7 +856,8 @@ const styles = {
     backgroundColor: '#0b1120',
     display: 'flex',
     flexDirection: 'column',
-    minHeight: 0
+    minHeight: 0,
+    height: '100%'
   },
   inboxHeader: {
     padding: '12px 14px',
@@ -744,7 +866,7 @@ const styles = {
     flexShrink: 0
   },
   inboxTitle: {
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: '800',
     color: '#94a3b8',
     textTransform: 'uppercase',
@@ -856,8 +978,7 @@ const styles = {
     borderRadius: '4px',
     fontSize: '11px',
     padding: '2px 6px',
-    cursor: 'pointer',
-    transition: 'background 0.2s'
+    cursor: 'pointer'
   },
   colChat: {
     display: 'flex',
@@ -869,7 +990,7 @@ const styles = {
     overflow: 'hidden'
   },
   chatWindowHeader: {
-    padding: '12px 18px',
+    padding: '10px 14px',
     backgroundColor: '#0f172a',
     borderBottom: '1px solid #1e293b',
     display: 'flex',
@@ -879,33 +1000,24 @@ const styles = {
   },
   chatTargetName: {
     margin: 0,
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#ffffff'
   },
   chatTargetPhone: {
     fontSize: '11px',
     color: '#64748b'
   },
-  tagStatusRight: {
-    fontSize: '11px',
-    fontWeight: 'bold',
-    backgroundColor: '#881337',
-    color: '#fff',
-    padding: '4px 8px',
-    borderRadius: '4px'
-  },
   chatMessagesArea: {
     flex: 1,
     overflowY: 'auto',
     minHeight: 0,
-    padding: '20px',
+    padding: '16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '10px'
   },
   msgBubble: {
-    maxWidth: '65%',
-    padding: '10px 14px',
+    padding: '8px 12px',
     borderRadius: '8px',
     position: 'relative',
     color: '#fff'
@@ -918,11 +1030,11 @@ const styles = {
     marginTop: '4px'
   },
   chatInputBar: {
-    padding: '12px 16px',
+    padding: '10px 14px',
     backgroundColor: '#0f172a',
     borderTop: '1px solid #1e293b',
     display: 'flex',
-    gap: '10px',
+    gap: '8px',
     flexShrink: 0
   },
   inputMessage: {
@@ -930,7 +1042,7 @@ const styles = {
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
     borderRadius: '6px',
-    padding: '10px 14px',
+    padding: '8px 12px',
     color: '#fff',
     fontSize: '13px',
     outline: 'none'
@@ -939,7 +1051,7 @@ const styles = {
     backgroundColor: '#881337',
     color: '#fff',
     border: 'none',
-    padding: '0 20px',
+    padding: '0 16px',
     borderRadius: '6px',
     fontWeight: 'bold',
     cursor: 'pointer'
@@ -949,24 +1061,25 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
+    height: '100%',
     overflow: 'hidden'
   },
   formHeader: {
-    padding: '14px 18px',
+    padding: '12px 16px',
     borderBottom: '1px solid #1e293b',
     flexShrink: 0
   },
   formTitle: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#ffffff',
     letterSpacing: '0.5px'
   },
   badgeAiReady: {
-    fontSize: '10px',
+    fontSize: '9.5px',
     fontWeight: 'bold',
     backgroundColor: '#064e3b',
     color: '#34d399',
-    padding: '2px 6px',
+    padding: '2px 5px',
     borderRadius: '4px'
   },
   btnTriggerAi: {
@@ -974,30 +1087,29 @@ const styles = {
     backgroundColor: '#1e1b4b',
     color: '#a5b4fc',
     border: '1px solid #4338ca',
-    padding: '9px 12px',
+    padding: '8px 10px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer',
-    transition: 'all 0.2s',
     textAlign: 'center'
   },
   formScroll: {
     flex: 1,
     overflowY: 'auto',
     minHeight: 0,
-    padding: '16px 18px',
+    padding: '14px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '10px'
   },
   fieldItem: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px'
+    gap: '3px'
   },
   fieldLabel: {
-    fontSize: '11px',
+    fontSize: '10.5px',
     fontWeight: 'bold',
     color: '#cbd5e1'
   },
@@ -1007,7 +1119,7 @@ const styles = {
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
     borderRadius: '6px',
-    padding: '8px 10px',
+    padding: '7px 9px',
     color: '#ffffff',
     fontSize: '12px',
     outline: 'none'
@@ -1018,19 +1130,19 @@ const styles = {
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
     borderRadius: '6px',
-    padding: '8px 10px',
+    padding: '7px 9px',
     color: '#ffffff',
     fontSize: '12px',
     outline: 'none'
   },
   fieldTextarea: {
     width: '100%',
-    height: '60px',
+    height: '55px',
     boxSizing: 'border-box',
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
     borderRadius: '6px',
-    padding: '8px 10px',
+    padding: '7px 9px',
     color: '#ffffff',
     fontSize: '12px',
     outline: 'none',
@@ -1038,37 +1150,37 @@ const styles = {
   },
   twoCols: {
     display: 'grid',
-    gridTemplateColumns: '1.2fr 1fr',
-    gap: '10px'
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px'
   },
   threeCols: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '8px'
+    gap: '6px'
   },
   btnActionQuote: {
     backgroundColor: '#881337',
     color: '#ffffff',
     border: 'none',
-    padding: '12px',
+    padding: '10px',
     borderRadius: '6px',
     fontWeight: 'bold',
-    fontSize: '13px',
+    fontSize: '12px',
     cursor: 'pointer',
-    marginTop: '6px'
+    marginTop: '4px'
   },
   tabEstadosLayout: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    padding: '20px',
-    gap: '16px',
+    padding: '14px',
+    gap: '12px',
     minHeight: 0,
     overflow: 'hidden'
   },
   filterButtonGroup: {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     overflowX: 'auto',
     paddingBottom: '4px',
     flexShrink: 0
@@ -1077,9 +1189,9 @@ const styles = {
     backgroundColor: '#1e293b',
     color: '#94a3b8',
     border: '1px solid #334155',
-    padding: '8px 14px',
+    padding: '6px 12px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer',
     whiteSpace: 'nowrap'
@@ -1088,9 +1200,9 @@ const styles = {
     backgroundColor: '#881337',
     color: '#ffffff',
     border: '1px solid #9f1239',
-    padding: '8px 14px',
+    padding: '6px 12px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer',
     whiteSpace: 'nowrap'
@@ -1098,18 +1210,17 @@ const styles = {
   estadosBodyGrid: {
     flex: 1,
     display: 'grid',
-    gridTemplateColumns: '320px 1fr',
-    gap: '16px',
+    gap: '12px',
     minHeight: 0,
     overflow: 'hidden'
   },
   estadosColList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '6px',
     overflowY: 'auto',
     backgroundColor: '#0b1120',
-    padding: '12px',
+    padding: '10px',
     borderRadius: '8px',
     border: '1px solid #1e293b',
     minHeight: 0
@@ -1118,18 +1229,17 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 14px',
+    padding: '10px 12px',
     borderRadius: '6px',
     border: '1px solid #334155',
     cursor: 'pointer',
-    width: '100%',
-    transition: 'border 0.2s'
+    width: '100%'
   },
   estadosColDetail: {
     backgroundColor: '#0f172a',
     borderRadius: '8px',
     border: '1px solid #1e293b',
-    padding: '24px',
+    padding: '16px',
     overflowY: 'auto',
     minHeight: 0
   },
@@ -1148,21 +1258,21 @@ const styles = {
   hr: {
     border: 'none',
     borderTop: '1px solid #1e293b',
-    margin: '18px 0'
+    margin: '14px 0'
   },
   stateSelectorGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '10px',
-    marginTop: '8px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+    gap: '8px',
+    marginTop: '6px'
   },
   stateBtnOption: {
     backgroundColor: '#1e293b',
     color: '#cbd5e1',
     border: '1px solid #334155',
-    padding: '10px',
+    padding: '8px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: '600',
     cursor: 'pointer'
   },
@@ -1170,9 +1280,9 @@ const styles = {
     backgroundColor: '#881337',
     color: '#ffffff',
     border: '1px solid #f43f5e',
-    padding: '10px',
+    padding: '8px',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer'
   },
@@ -1180,7 +1290,7 @@ const styles = {
     backgroundColor: '#0b1120',
     border: '1px solid #1e293b',
     borderRadius: '6px',
-    padding: '14px',
-    marginBottom: '20px'
+    padding: '12px',
+    marginBottom: '16px'
   }
 };
