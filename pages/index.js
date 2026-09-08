@@ -23,6 +23,7 @@ export default function ModuloVentasCRM() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Sincronización continua sin pisar datos locales
   useEffect(() => {
     const fetchConversations = async () => {
       try {
@@ -35,9 +36,13 @@ export default function ModuloVentasCRM() {
               setSelectedId(String(data[0].id));
               setFormData(data[0].quoteData || {});
             } else {
+              // Si el usuario tiene una conversación activa, enriquecer la ficha sin pisarla con vacíos
               const current = data.find((c) => String(c.id) === String(selectedId));
-              if (current && current.quoteData) {
-                setFormData((prev) => ({ ...current.quoteData, ...prev }));
+              if (current?.quoteData && Object.keys(current.quoteData).length > 0) {
+                setFormData((prev) => ({
+                  ...current.quoteData,
+                  ...prev
+                }));
               }
             }
           }
@@ -110,10 +115,11 @@ export default function ModuloVentasCRM() {
     );
   };
 
+  // Guardado manual con feedback real y confirmación
   const handleSaveFormDataManual = async () => {
     if (!selectedConv?.phone) return;
     try {
-      await fetch('/api/whatsapp-webhook', {
+      const res = await fetch('/api/whatsapp-webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,9 +127,16 @@ export default function ModuloVentasCRM() {
           extractedData: formData
         })
       });
-      alert('✅ Ficha guardada en el CRM con éxito');
+      if (res.ok) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            String(c.id) === String(selectedId) ? { ...c, quoteData: formData } : c
+          )
+        );
+        alert('✅ Ficha guardada con éxito en el CRM');
+      }
     } catch (err) {
-      alert('Error guardando ficha: ' + err.message);
+      alert('Error al guardar ficha: ' + err.message);
     }
   };
 
@@ -206,6 +219,7 @@ export default function ModuloVentasCRM() {
     }
   };
 
+  // Envío manual universal: envía a WhatsApp y preserva quoteData intacto
   const handleSendReply = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv?.phone) return;
@@ -221,33 +235,44 @@ export default function ModuloVentasCRM() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
+    // Actualización inmediata en pantalla sin perder quoteData
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId)
-          ? { ...c, lastMessage: messageText, messages: [...(c.messages || []), newMsg] }
+          ? {
+              ...c,
+              lastMessage: messageText,
+              messages: [...(c.messages || []), newMsg],
+              quoteData: formData // Mantiene la ficha
+            }
           : c
       )
     );
 
+    // 1. Enviar a bot.js si corre localmente
+    fetch('http://localhost:3001/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: selectedConv.phone,
+        message: messageText
+      })
+    }).catch(() => {});
+
+    // 2. Guardar en el Webhook pasando la ficha actual para no resetearla
     try {
-      await fetch('http://localhost:3001/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: selectedConv.phone,
-          message: messageText
-        })
-      });
-    } catch (_) {
       await fetch('/api/whatsapp-webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: selectedConv.phone,
           text: messageText,
-          sender: 'me'
+          sender: 'me',
+          extractedData: formData // Mantiene intacta la ficha
         })
-      }).catch((err) => console.error('Error enviando:', err));
+      });
+    } catch (err) {
+      console.error('Error registrando respuesta:', err);
     }
   };
 
@@ -526,7 +551,7 @@ export default function ModuloVentasCRM() {
             </section>
           )}
 
-          {/* FICHA TÉCNICA & COTIZACIÓN OPERATIVA */}
+          {/* FICHA TÉCNICA */}
           {(!isMobile || mobileTab === 'ficha') && (
             <aside style={styles.colForm}>
               <div style={styles.formHeader}>
@@ -646,7 +671,6 @@ export default function ModuloVentasCRM() {
                   </select>
                 </div>
 
-                {/* DESGLOSE AUTOMÁTICO DE COSTOS */}
                 <div style={{ backgroundColor: '#0b1120', padding: '10px', borderRadius: '6px', border: '1px solid #1e293b' }}>
                   <span style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
                     DESGLOSE ESTIMADO DE LA COTIZACIÓN:
@@ -725,7 +749,7 @@ export default function ModuloVentasCRM() {
         </main>
       )}
 
-      {/* PESTAÑA ESTADOS CON RESUMEN COMERCIAL */}
+      {/* PESTAÑA ESTADOS */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
           <div style={styles.filterButtonGroup}>
@@ -808,7 +832,6 @@ export default function ModuloVentasCRM() {
 
                   <hr style={styles.hr} />
 
-                  {/* TARJETA RESUMEN DE COTIZACIÓN */}
                   <div style={{ backgroundColor: '#0b1120', border: '1px solid #334155', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                     <h3 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#38bdf8', textTransform: 'uppercase' }}>
                       📋 Resumen de Carga & Cotización
