@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 
 export default function ModuloVentasCRM() {
   const [activeTab, setActiveTab] = useState('inbox');
-  const [mobileTab, setMobileTab] = useState('chats'); // 'chats' | 'chat_activo' | 'ficha'
+  const [mobileTab, setMobileTab] = useState('chats');
   const [inboxFilter, setInboxFilter] = useState('activos');
   const [loadingAi, setLoadingAi] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -13,11 +13,11 @@ export default function ModuloVentasCRM() {
   const [isMobile, setIsMobile] = useState(false);
 
   const chatBottomRef = useRef(null);
+  const chatAreaRef = useRef(null);
+  const isUserScrollingRef = useRef(false);
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -51,16 +51,29 @@ export default function ModuloVentasCRM() {
     (c) => String(c.id) === String(selectedId)
   ) || conversations[0] || { messages: [], quoteData: {}, botActive: true };
 
+  // Control estricto de auto-scroll: respeta si estás leyendo arriba
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConv?.messages, mobileTab]);
+    if (!isUserScrollingRef.current) {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [selectedConv?.messages?.length, mobileTab]);
+
+  const handleScrollChat = () => {
+    if (!chatAreaRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatAreaRef.current;
+    // Si estás a más de 120px del final, estás leyendo historial arriba
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isUserScrollingRef.current = distanceFromBottom > 120;
+  };
 
   const handleSelectConversation = (conv) => {
+    isUserScrollingRef.current = false;
     setSelectedId(String(conv.id));
     setFormData(conv.quoteData || {});
-    if (isMobile) {
-      setMobileTab('chat_activo');
-    }
+    if (isMobile) setMobileTab('chat_activo');
+    setTimeout(() => {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 60);
   };
 
   const handleToggleBotIndividual = async () => {
@@ -92,6 +105,23 @@ export default function ModuloVentasCRM() {
         String(c.id) === String(selectedId) ? { ...c, quoteData: updated } : c
       )
     );
+  };
+
+  const handleSaveFormDataManual = async () => {
+    if (!selectedConv?.phone) return;
+    try {
+      await fetch('/api/whatsapp-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: selectedConv.phone,
+          extractedData: formData
+        })
+      });
+      alert('✅ Ficha guardada en el CRM con éxito');
+    } catch (err) {
+      alert('Error guardando ficha: ' + err.message);
+    }
   };
 
   const handleStatusChange = (newStatus) => {
@@ -128,6 +158,17 @@ export default function ModuloVentasCRM() {
             String(c.id) === String(selectedId) ? { ...c, quoteData: mergedData } : c
           )
         );
+
+        if (selectedConv?.phone) {
+          await fetch('/api/whatsapp-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: selectedConv.phone,
+              extractedData: mergedData
+            })
+          });
+        }
       }
 
       if (data.replyMessage) {
@@ -145,60 +186,50 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  const handleToggleArchive = (id, e) => {
-    e.stopPropagation();
-    setConversations((prev) =>
-      prev.map((c) =>
-        String(c.id) === String(id) ? { ...c, archived: !c.archived } : c
-      )
-    );
-  };
-
-  const handleDeleteConversation = (id, e) => {
-    e.stopPropagation();
-    if (confirm('¿Eliminar conversación?')) {
-      const remaining = conversations.filter((c) => String(c.id) !== String(id));
-      setConversations(remaining);
-      if (String(selectedId) === String(id) && remaining.length > 0) {
-        setSelectedId(String(remaining[0].id));
-        setFormData(remaining[0].quoteData || {});
-      }
-    }
-  };
-
-  const handleRenameConversation = (id, currentName, e) => {
-    e.stopPropagation();
-    const newName = prompt('Nuevo nombre:', currentName);
-    if (newName && newName.trim()) {
-      setConversations((prev) =>
-        prev.map((c) =>
-          String(c.id) === String(id)
-            ? { ...c, name: newName.trim(), quoteData: { ...c.quoteData, clientName: newName.trim() } }
-            : c
-        )
-      );
-    }
-  };
-
-  const handleSendReply = (e) => {
+  // Envío manual real a WhatsApp (local port 3001) y base de datos
+  const handleSendReply = async (e) => {
     e.preventDefault();
-    if (!inputReply.trim()) return;
+    if (!inputReply.trim() || !selectedConv?.phone) return;
+
+    const messageText = inputReply.trim();
+    setInputReply('');
+    isUserScrollingRef.current = false;
 
     const newMsg = {
       id: Date.now(),
       sender: 'me',
-      text: inputReply,
+      text: messageText,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId)
-          ? { ...c, lastMessage: inputReply, messages: [...(c.messages || []), newMsg] }
+          ? { ...c, lastMessage: messageText, messages: [...(c.messages || []), newMsg] }
           : c
       )
     );
-    setInputReply('');
+
+    try {
+      await fetch('http://localhost:3001/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: selectedConv.phone,
+          message: messageText
+        })
+      });
+    } catch (_) {
+      await fetch('/api/whatsapp-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: selectedConv.phone,
+          text: messageText,
+          sender: 'me'
+        })
+      }).catch((err) => console.error('Error enviando:', err));
+    }
   };
 
   const estadosDisponibles = [
@@ -223,7 +254,6 @@ export default function ModuloVentasCRM() {
 
   return (
     <div style={styles.container}>
-      {/* BARRA SUPERIOR */}
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
           <img src="/logo.png" alt="DCAM" style={styles.logoImg} />
@@ -256,7 +286,6 @@ export default function ModuloVentasCRM() {
         </nav>
       </header>
 
-      {/* PESTAÑAS MÓVILES EXCLUSIVAS PARA CELULARES VERTICALES */}
       {isMobile && activeTab === 'inbox' && (
         <div style={styles.mobileSubNav}>
           <button
@@ -278,7 +307,7 @@ export default function ModuloVentasCRM() {
             style={mobileTab === 'ficha' ? styles.mobileTabBtnActive : styles.mobileTabBtn}
             onClick={() => setMobileTab('ficha')}
           >
-            📝 Cotizador
+            📝 Ficha / Cotizar
           </button>
         </div>
       )}
@@ -290,7 +319,7 @@ export default function ModuloVentasCRM() {
             gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 390px'
           }}
         >
-          {/* 1. BANDEJA DE CONTACTOS */}
+          {/* BANDEJA DE CONTACTOS */}
           {(!isMobile || mobileTab === 'chats') && (
             <aside style={styles.colInbox}>
               <div style={styles.inboxHeader}>
@@ -318,7 +347,7 @@ export default function ModuloVentasCRM() {
               <div style={styles.chatScrollList}>
                 {displayedConversations.length === 0 && (
                   <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
-                    No hay conversaciones activas.
+                    No hay conversaciones.
                   </div>
                 )}
                 {displayedConversations.map((conv) => {
@@ -350,35 +379,8 @@ export default function ModuloVentasCRM() {
                         </div>
                         <div style={styles.chatPhone}>+{conv.phone}</div>
                         <p style={styles.chatSnippet}>{conv.lastMessage}</p>
-
-                        <div style={styles.cardFooterActions}>
+                        <div style={{ marginTop: '4px' }}>
                           <span style={styles.badgeStatusMini}>{conv.status}</span>
-                          <div style={styles.actionButtonsRow}>
-                            <button
-                              type="button"
-                              title="Renombrar"
-                              style={styles.btnMiniAction}
-                              onClick={(e) => handleRenameConversation(conv.id, conv.name, e)}
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              type="button"
-                              title="Archivar"
-                              style={styles.btnMiniAction}
-                              onClick={(e) => handleToggleArchive(conv.id, e)}
-                            >
-                              {conv.archived ? '📤' : '📦'}
-                            </button>
-                            <button
-                              type="button"
-                              title="Borrar"
-                              style={{ ...styles.btnMiniAction, color: '#f87171' }}
-                              onClick={(e) => handleDeleteConversation(conv.id, e)}
-                            >
-                              🗑️
-                            </button>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -388,7 +390,7 @@ export default function ModuloVentasCRM() {
             </aside>
           )}
 
-          {/* 2. CHAT ACTIVO */}
+          {/* CHAT ACTIVO */}
           {(!isMobile || mobileTab === 'chat_activo') && (
             <section style={styles.colChat}>
               <div style={styles.chatWindowHeader}>
@@ -427,13 +429,17 @@ export default function ModuloVentasCRM() {
                         fontWeight: 'bold'
                       }}
                     >
-                      📝 Cotizar
+                      📝 Ficha
                     </button>
                   )}
                 </div>
               </div>
 
-              <div style={styles.chatMessagesArea}>
+              <div
+                ref={chatAreaRef}
+                onScroll={handleScrollChat}
+                style={styles.chatMessagesArea}
+              >
                 {(selectedConv?.messages || []).map((m) => (
                   <div
                     key={m.id}
@@ -454,7 +460,7 @@ export default function ModuloVentasCRM() {
               <form onSubmit={handleSendReply} style={styles.chatInputBar}>
                 <input
                   type="text"
-                  placeholder="Escribí un mensaje..."
+                  placeholder="Escribí un mensaje manual..."
                   value={inputReply}
                   onChange={(e) => setInputReply(e.target.value)}
                   style={styles.inputMessage}
@@ -466,13 +472,13 @@ export default function ModuloVentasCRM() {
             </section>
           )}
 
-          {/* 3. COLUMNA DE DATOS / COTIZADOR */}
+          {/* FICHA & COTIZADOR */}
           {(!isMobile || mobileTab === 'ficha') && (
             <aside style={styles.colForm}>
               <div style={styles.formHeader}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <strong style={styles.formTitle}>COTIZADOR AUTOMÁTICO</strong>
-                  <span style={styles.badgeAiReady}>Tarifas 2026</span>
+                  <strong style={styles.formTitle}>FICHA & COTIZACIÓN</strong>
+                  <span style={styles.badgeAiReady}>VUCE Conectado</span>
                 </div>
 
                 <button
@@ -485,7 +491,7 @@ export default function ModuloVentasCRM() {
                     cursor: loadingAi ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {loadingAi ? '⏳ Sol calculando...' : '⚡ Sol: Calcular Mejor Opción'}
+                  {loadingAi ? '⏳ Sol completando ficha...' : '⚡ Sol: Autocompletar Ficha'}
                 </button>
               </div>
 
@@ -502,17 +508,6 @@ export default function ModuloVentasCRM() {
                 </div>
 
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>WhatsApp:</label>
-                  <input
-                    type="text"
-                    style={styles.fieldInput}
-                    value={formData?.phone || ''}
-                    onChange={(e) => handleFormChange('phone', e.target.value)}
-                    placeholder="549..."
-                  />
-                </div>
-
-                <div style={styles.fieldItem}>
                   <label style={styles.fieldLabel}>Producto / Mercadería:</label>
                   <input
                     type="text"
@@ -525,13 +520,13 @@ export default function ModuloVentasCRM() {
 
                 <div style={styles.twoCols}>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>Posición Arancelaria:</label>
+                    <label style={styles.fieldLabel}>Posición Arancelaria (Interno):</label>
                     <input
                       type="text"
-                      style={styles.fieldInput}
+                      style={{ ...styles.fieldInput, border: '1px solid #059669', color: '#34d399' }}
                       value={formData?.hscode || ''}
                       onChange={(e) => handleFormChange('hscode', e.target.value)}
-                      placeholder="VUCE"
+                      placeholder="Ej: 8418.69.10"
                     />
                   </div>
                   <div style={styles.fieldItem}>
@@ -550,7 +545,7 @@ export default function ModuloVentasCRM() {
 
                 <div style={styles.threeCols}>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>FOB USD:</label>
+                    <label style={styles.fieldLabel}>FOB (USD):</label>
                     <input
                       type="number"
                       style={styles.fieldInput}
@@ -610,9 +605,9 @@ export default function ModuloVentasCRM() {
                 <button
                   type="button"
                   style={styles.btnActionQuote}
-                  onClick={() => alert('Ficha guardada con éxito.')}
+                  onClick={handleSaveFormDataManual}
                 >
-                  💾 Guardar Datos
+                  💾 Guardar Ficha
                 </button>
               </div>
             </aside>
@@ -620,7 +615,6 @@ export default function ModuloVentasCRM() {
         </main>
       )}
 
-      {/* PESTAÑA DE ESTADOS */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
           <div style={styles.filterButtonGroup}>
@@ -684,7 +678,7 @@ export default function ModuloVentasCRM() {
                         {selectedConv.name}
                       </h2>
                       <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                        WhatsApp: +{selectedConv.phone} | Contacto: {selectedConv.time}
+                        WhatsApp: +{selectedConv.phone}
                       </span>
                     </div>
                     <div style={styles.statusCurrentBox}>
@@ -697,7 +691,7 @@ export default function ModuloVentasCRM() {
 
                   <hr style={styles.hr} />
 
-                  <div style={{ marginBottom: '20px' }}>
+                  <div>
                     <label style={styles.fieldLabel}>Cambiar Estado:</label>
                     <div style={styles.stateSelectorGrid}>
                       {estadosDisponibles.map((estado) => (
@@ -716,15 +710,6 @@ export default function ModuloVentasCRM() {
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <div style={styles.summaryBox}>
-                    <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#cbd5e1' }}>
-                      ÚLTIMO MENSAJE:
-                    </h4>
-                    <p style={{ margin: 0, fontSize: '13px', color: '#f1f5f9', fontStyle: 'italic' }}>
-                      "{selectedConv.lastMessage}"
-                    </p>
                   </div>
                 </div>
               </div>
@@ -948,12 +933,6 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   },
-  cardFooterActions: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: '6px'
-  },
   badgeStatusMini: {
     fontSize: '9.5px',
     fontWeight: 'bold',
@@ -962,18 +941,6 @@ const styles = {
     color: '#fbbf24',
     padding: '2px 5px',
     borderRadius: '4px'
-  },
-  actionButtonsRow: {
-    display: 'flex',
-    gap: '4px'
-  },
-  btnMiniAction: {
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
-    borderRadius: '4px',
-    fontSize: '11px',
-    padding: '2px 6px',
-    cursor: 'pointer'
   },
   colChat: {
     display: 'flex',
@@ -1279,12 +1246,5 @@ const styles = {
     fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer'
-  },
-  summaryBox: {
-    backgroundColor: '#0b1120',
-    border: '1px solid #1e293b',
-    borderRadius: '6px',
-    padding: '12px',
-    marginBottom: '16px'
   }
 };
