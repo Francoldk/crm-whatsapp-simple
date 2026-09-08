@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 
 export default function ModuloVentasCRM() {
   const [activeTab, setActiveTab] = useState('inbox');
+  const [mobileTab, setMobileTab] = useState('chats'); // 'chats' | 'chat_activo' | 'ficha'
   const [inboxFilter, setInboxFilter] = useState('activos');
   const [loadingAi, setLoadingAi] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -9,11 +10,7 @@ export default function ModuloVentasCRM() {
   const [formData, setFormData] = useState({});
   const [inputReply, setInputReply] = useState('');
   const [statusFilter, setStatusFilter] = useState('TODOS');
-  
-  // Control de vistas en celular
   const [isMobile, setIsMobile] = useState(false);
-  const [showMobileChat, setShowMobileChat] = useState(false);
-  const [showMobileForm, setShowMobileForm] = useState(false);
 
   const chatBottomRef = useRef(null);
 
@@ -56,14 +53,13 @@ export default function ModuloVentasCRM() {
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConv?.messages, showMobileChat]);
+  }, [selectedConv?.messages, mobileTab]);
 
   const handleSelectConversation = (conv) => {
     setSelectedId(String(conv.id));
     setFormData(conv.quoteData || {});
     if (isMobile) {
-      setShowMobileChat(true);
-      setShowMobileForm(false);
+      setMobileTab('chat_activo');
     }
   };
 
@@ -143,7 +139,7 @@ export default function ModuloVentasCRM() {
       }
     } catch (err) {
       console.error(err);
-      alert('Detalle del error: ' + err.message);
+      alert('Detalle: ' + err.message);
     } finally {
       setLoadingAi(false);
     }
@@ -160,7 +156,7 @@ export default function ModuloVentasCRM() {
 
   const handleDeleteConversation = (id, e) => {
     e.stopPropagation();
-    if (confirm('¿Eliminar esta conversación del CRM?')) {
+    if (confirm('¿Eliminar conversación?')) {
       const remaining = conversations.filter((c) => String(c.id) !== String(id));
       setConversations(remaining);
       if (String(selectedId) === String(id) && remaining.length > 0) {
@@ -172,7 +168,7 @@ export default function ModuloVentasCRM() {
 
   const handleRenameConversation = (id, currentName, e) => {
     e.stopPropagation();
-    const newName = prompt('Ingrese el nuevo nombre para este contacto:', currentName);
+    const newName = prompt('Nuevo nombre:', currentName);
     if (newName && newName.trim()) {
       setConversations((prev) =>
         prev.map((c) =>
@@ -181,9 +177,6 @@ export default function ModuloVentasCRM() {
             : c
         )
       );
-      if (String(selectedId) === String(id)) {
-        setFormData((prev) => ({ ...prev, clientName: newName.trim() }));
-      }
     }
   };
 
@@ -230,15 +223,16 @@ export default function ModuloVentasCRM() {
 
   return (
     <div style={styles.container}>
+      {/* BARRA SUPERIOR */}
       <header style={styles.topBar}>
         <div style={styles.brandingBox}>
-          <img src="/logo.png" alt="De China Al Mundo" style={styles.logoImg} />
+          <img src="/logo.png" alt="DCAM" style={styles.logoImg} />
           {!isMobile && (
             <>
               <div style={styles.dividerV} />
               <div>
-                <h1 style={styles.systemTitle}>Módulo de Ventas & Operaciones Comex</h1>
-                <span style={styles.systemSub}>Gestión de Leads, WhatsApp y Precotización</span>
+                <h1 style={styles.systemTitle}>Módulo de Ventas & Operaciones</h1>
+                <span style={styles.systemSub}>De China al Mundo</span>
               </div>
             </>
           )}
@@ -248,13 +242,9 @@ export default function ModuloVentasCRM() {
           <button
             type="button"
             style={activeTab === 'inbox' ? styles.tabBtnActive : styles.tabBtn}
-            onClick={() => {
-              setActiveTab('inbox');
-              setShowMobileChat(false);
-              setShowMobileForm(false);
-            }}
+            onClick={() => setActiveTab('inbox')}
           >
-            📥 {isMobile ? 'Bandeja' : 'Bandeja (3 Columnas)'}
+            📥 Inbox
           </button>
           <button
             type="button"
@@ -266,17 +256,43 @@ export default function ModuloVentasCRM() {
         </nav>
       </header>
 
+      {/* PESTAÑAS MÓVILES EXCLUSIVAS PARA CELULARES VERTICALES */}
+      {isMobile && activeTab === 'inbox' && (
+        <div style={styles.mobileSubNav}>
+          <button
+            type="button"
+            style={mobileTab === 'chats' ? styles.mobileTabBtnActive : styles.mobileTabBtn}
+            onClick={() => setMobileTab('chats')}
+          >
+            💬 Contactos ({displayedConversations.length})
+          </button>
+          <button
+            type="button"
+            style={mobileTab === 'chat_activo' ? styles.mobileTabBtnActive : styles.mobileTabBtn}
+            onClick={() => setMobileTab('chat_activo')}
+          >
+            📱 Chat: {selectedConv?.name ? selectedConv.name.slice(0, 12) : 'Sin chat'}
+          </button>
+          <button
+            type="button"
+            style={mobileTab === 'ficha' ? styles.mobileTabBtnActive : styles.mobileTabBtn}
+            onClick={() => setMobileTab('ficha')}
+          >
+            📝 Cotizador
+          </button>
+        </div>
+      )}
+
       {activeTab === 'inbox' && (
         <main
           style={{
             ...styles.mainGrid,
-            gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 390px',
-            position: 'relative'
+            gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 390px'
           }}
         >
-          {/* 1. LISTA DE CONTACTOS / LEADS */}
-          {(!isMobile || !showMobileChat) && (
-            <aside style={{ ...styles.colInbox, width: isMobile ? '100%' : 'auto' }}>
+          {/* 1. BANDEJA DE CONTACTOS */}
+          {(!isMobile || mobileTab === 'chats') && (
+            <aside style={styles.colInbox}>
               <div style={styles.inboxHeader}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={styles.inboxTitle}>Mensajes</span>
@@ -301,8 +317,8 @@ export default function ModuloVentasCRM() {
 
               <div style={styles.chatScrollList}>
                 {displayedConversations.length === 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-                    No hay conversaciones en esta sección.
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                    No hay conversaciones activas.
                   </div>
                 )}
                 {displayedConversations.map((conv) => {
@@ -340,7 +356,7 @@ export default function ModuloVentasCRM() {
                           <div style={styles.actionButtonsRow}>
                             <button
                               type="button"
-                              title="Renombrar cliente"
+                              title="Renombrar"
                               style={styles.btnMiniAction}
                               onClick={(e) => handleRenameConversation(conv.id, conv.name, e)}
                             >
@@ -348,7 +364,7 @@ export default function ModuloVentasCRM() {
                             </button>
                             <button
                               type="button"
-                              title={conv.archived ? 'Desarchivar' : 'Archivar conversación'}
+                              title="Archivar"
                               style={styles.btnMiniAction}
                               onClick={(e) => handleToggleArchive(conv.id, e)}
                             >
@@ -356,7 +372,7 @@ export default function ModuloVentasCRM() {
                             </button>
                             <button
                               type="button"
-                              title="Borrar conversación"
+                              title="Borrar"
                               style={{ ...styles.btnMiniAction, color: '#f87171' }}
                               onClick={(e) => handleDeleteConversation(conv.id, e)}
                             >
@@ -372,60 +388,15 @@ export default function ModuloVentasCRM() {
             </aside>
           )}
 
-          {/* 2. CHAT CONVERSACIONAL */}
-          {(!isMobile || showMobileChat) && (
-            <section
-              style={{
-                ...styles.colChat,
-                width: isMobile ? '100%' : 'auto',
-                display: isMobile && showMobileForm ? 'none' : 'flex'
-              }}
-            >
+          {/* 2. CHAT ACTIVO */}
+          {(!isMobile || mobileTab === 'chat_activo') && (
+            <section style={styles.colChat}>
               <div style={styles.chatWindowHeader}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {isMobile && (
-                    <button
-                      type="button"
-                      onClick={() => setShowMobileChat(false)}
-                      style={{
-                        backgroundColor: '#1e293b',
-                        color: '#cbd5e1',
-                        border: '1px solid #334155',
-                        padding: '6px 10px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ← Volver
-                    </button>
-                  )}
-                  <div>
-                    <h3 style={styles.chatTargetName}>{selectedConv?.name || 'Seleccione un chat'}</h3>
-                    {selectedConv?.phone && <span style={styles.chatTargetPhone}>+{selectedConv.phone}</span>}
-                  </div>
+                <div>
+                  <h3 style={styles.chatTargetName}>{selectedConv?.name || 'Seleccione conversación'}</h3>
+                  {selectedConv?.phone && <span style={styles.chatTargetPhone}>+{selectedConv.phone}</span>}
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {isMobile && (
-                    <button
-                      type="button"
-                      onClick={() => setShowMobileForm(true)}
-                      style={{
-                        backgroundColor: '#881337',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '6px 10px',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      📝 Ficha
-                    </button>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     type="button"
                     onClick={handleToggleBotIndividual}
@@ -433,15 +404,32 @@ export default function ModuloVentasCRM() {
                       backgroundColor: isSolActiveInCurrent ? '#064e3b' : '#7f1d1d',
                       color: isSolActiveInCurrent ? '#34d399' : '#fca5a5',
                       border: `1px solid ${isSolActiveInCurrent ? '#059669' : '#b91c1c'}`,
-                      padding: '6px 8px',
-                      borderRadius: '6px',
-                      fontSize: '10px',
+                      padding: '5px 8px',
+                      borderRadius: '5px',
+                      fontSize: '11px',
                       fontWeight: 'bold',
                       cursor: 'pointer'
                     }}
                   >
                     {isSolActiveInCurrent ? '🤖 Sol Activa' : '⏸️ Sol Pausa'}
                   </button>
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => setMobileTab('ficha')}
+                      style={{
+                        backgroundColor: '#881337',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '5px 8px',
+                        borderRadius: '5px',
+                        fontSize: '11px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      📝 Cotizar
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -478,43 +466,13 @@ export default function ModuloVentasCRM() {
             </section>
           )}
 
-          {/* 3. COLUMNA DE DATOS Y COTIZACIÓN */}
-          {(!isMobile || showMobileForm) && (
-            <aside
-              style={{
-                ...styles.colForm,
-                width: isMobile ? '100%' : 'auto',
-                position: isMobile ? 'absolute' : 'relative',
-                top: 0,
-                bottom: 0,
-                left: 0,
-                right: 0,
-                zIndex: isMobile ? 50 : 1
-              }}
-            >
+          {/* 3. COLUMNA DE DATOS / COTIZADOR */}
+          {(!isMobile || mobileTab === 'ficha') && (
+            <aside style={styles.colForm}>
               <div style={styles.formHeader}>
-                {isMobile && (
-                  <button
-                    type="button"
-                    onClick={() => setShowMobileForm(false)}
-                    style={{
-                      backgroundColor: '#1e293b',
-                      color: '#cbd5e1',
-                      border: '1px solid #334155',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      marginBottom: '10px'
-                    }}
-                  >
-                    ← Volver al Chat
-                  </button>
-                )}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <strong style={styles.formTitle}>DATOS DE COTIZACIÓN</strong>
-                  <span style={styles.badgeAiReady}>Sol Motor Listo</span>
+                  <strong style={styles.formTitle}>COTIZADOR AUTOMÁTICO</strong>
+                  <span style={styles.badgeAiReady}>Tarifas 2026</span>
                 </div>
 
                 <button
@@ -527,7 +485,7 @@ export default function ModuloVentasCRM() {
                     cursor: loadingAi ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {loadingAi ? '⏳ Sol está analizando...' : '⚡ Sol: Autocompletar & Cotizar'}
+                  {loadingAi ? '⏳ Sol calculando...' : '⚡ Sol: Calcular Mejor Opción'}
                 </button>
               </div>
 
@@ -539,18 +497,18 @@ export default function ModuloVentasCRM() {
                     style={styles.fieldInput}
                     value={formData?.clientName || ''}
                     onChange={(e) => handleFormChange('clientName', e.target.value)}
-                    placeholder="Ej: Martin Sanchez"
+                    placeholder="Nombre"
                   />
                 </div>
 
                 <div style={styles.fieldItem}>
-                  <label style={styles.fieldLabel}>WhatsApp de Contacto:</label>
+                  <label style={styles.fieldLabel}>WhatsApp:</label>
                   <input
                     type="text"
                     style={styles.fieldInput}
                     value={formData?.phone || ''}
                     onChange={(e) => handleFormChange('phone', e.target.value)}
-                    placeholder="Ej: 549351..."
+                    placeholder="549..."
                   />
                 </div>
 
@@ -561,7 +519,7 @@ export default function ModuloVentasCRM() {
                     style={styles.fieldInput}
                     value={formData?.product || ''}
                     onChange={(e) => handleFormChange('product', e.target.value)}
-                    placeholder="Ej: Prensa Hidraulica"
+                    placeholder="Descripción"
                   />
                 </div>
 
@@ -573,7 +531,7 @@ export default function ModuloVentasCRM() {
                       style={styles.fieldInput}
                       value={formData?.hscode || ''}
                       onChange={(e) => handleFormChange('hscode', e.target.value)}
-                      placeholder="Ej: 9024.80.90"
+                      placeholder="VUCE"
                     />
                   </div>
                   <div style={styles.fieldItem}>
@@ -586,41 +544,40 @@ export default function ModuloVentasCRM() {
                       <option value="EXW">EXW</option>
                       <option value="FOB">FOB</option>
                       <option value="CIF">CIF</option>
-                      <option value="DDP">DDP</option>
                     </select>
                   </div>
                 </div>
 
                 <div style={styles.threeCols}>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>FOB (USD):</label>
+                    <label style={styles.fieldLabel}>FOB USD:</label>
                     <input
                       type="number"
                       style={styles.fieldInput}
                       value={formData?.goodsValue || ''}
                       onChange={(e) => handleFormChange('goodsValue', e.target.value)}
-                      placeholder="2250"
+                      placeholder="USD"
                     />
                   </div>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>Peso (Kg):</label>
+                    <label style={styles.fieldLabel}>Kilos:</label>
                     <input
                       type="number"
                       style={styles.fieldInput}
                       value={formData?.weightKg || ''}
                       onChange={(e) => handleFormChange('weightKg', e.target.value)}
-                      placeholder="150"
+                      placeholder="Kg"
                     />
                   </div>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>Volumen (m³):</label>
+                    <label style={styles.fieldLabel}>CBM (m³):</label>
                     <input
                       type="number"
                       step="0.01"
                       style={styles.fieldInput}
                       value={formData?.cbm || ''}
                       onChange={(e) => handleFormChange('cbm', e.target.value)}
-                      placeholder="0.8"
+                      placeholder="m³"
                     />
                   </div>
                 </div>
@@ -629,13 +586,14 @@ export default function ModuloVentasCRM() {
                   <label style={styles.fieldLabel}>Modalidad de Flete:</label>
                   <select
                     style={styles.fieldSelect}
-                    value={formData?.shippingMode || 'maritimo_compartido'}
+                    value={formData?.shippingMode || 'grupo_maritimo'}
                     onChange={(e) => handleFormChange('shippingMode', e.target.value)}
                   >
-                    <option value="maritimo_compartido">🚢 Carga Compartida Marítima (8.5 USD/kg)</option>
-                    <option value="maritimo_cbm">📦 Carga Marítima por CBM</option>
-                    <option value="courier_aereo">✈️ Courier Aéreo (15-18 USD/kg)</option>
-                    <option value="all_in_aereo">🚀 All In Aéreo (45 USD/kg)</option>
+                    <option value="grupo_maritimo">🚢 Marítimo en Grupo (5 USD/kg si &lt; 1 CBM)</option>
+                    <option value="maritimo_cbm_menos5">📦 Carga Marítima (&lt; 5 m³: 450 USD/CBM)</option>
+                    <option value="maritimo_cbm_mas5">📦 Carga Marítima (&gt;= 5 m³: 350 USD/CBM)</option>
+                    <option value="aereo_hasta30">✈️ Aéreo (hasta 30 kg: 20 USD/kg)</option>
+                    <option value="aereo_mas30">✈️ Aéreo (desde 30 kg: 15 USD/kg)</option>
                   </select>
                 </div>
 
@@ -645,16 +603,16 @@ export default function ModuloVentasCRM() {
                     style={styles.fieldTextarea}
                     value={formData?.notes || ''}
                     onChange={(e) => handleFormChange('notes', e.target.value)}
-                    placeholder="Detalles de la carga."
+                    placeholder="Detalles..."
                   />
                 </div>
 
                 <button
                   type="button"
                   style={styles.btnActionQuote}
-                  onClick={() => alert('Ficha guardada.')}
+                  onClick={() => alert('Ficha guardada con éxito.')}
                 >
-                  💾 Guardar Ficha
+                  💾 Guardar Datos
                 </button>
               </div>
             </aside>
@@ -662,6 +620,7 @@ export default function ModuloVentasCRM() {
         </main>
       )}
 
+      {/* PESTAÑA DE ESTADOS */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
           <div style={styles.filterButtonGroup}>
@@ -761,7 +720,7 @@ export default function ModuloVentasCRM() {
 
                   <div style={styles.summaryBox}>
                     <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#cbd5e1' }}>
-                      ÚLTIMO MENSAJE REGISTRADO:
+                      ÚLTIMO MENSAJE:
                     </h4>
                     <p style={{ margin: 0, fontSize: '13px', color: '#f1f5f9', fontStyle: 'italic' }}>
                       "{selectedConv.lastMessage}"
@@ -788,7 +747,7 @@ const styles = {
     overflow: 'hidden'
   },
   topBar: {
-    height: '60px',
+    height: '56px',
     backgroundColor: '#0f172a',
     borderBottom: '1px solid #1e293b',
     display: 'flex',
@@ -829,9 +788,9 @@ const styles = {
     backgroundColor: '#1e293b',
     color: '#94a3b8',
     border: '1px solid #334155',
-    padding: '6px 10px',
+    padding: '6px 12px',
     borderRadius: '6px',
-    fontSize: '11px',
+    fontSize: '12px',
     fontWeight: 'bold',
     cursor: 'pointer'
   },
@@ -839,11 +798,49 @@ const styles = {
     backgroundColor: '#881337',
     color: '#ffffff',
     border: '1px solid #9f1239',
-    padding: '6px 10px',
+    padding: '6px 12px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  mobileSubNav: {
+    display: 'flex',
+    backgroundColor: '#0b1120',
+    borderBottom: '1px solid #1e293b',
+    padding: '4px',
+    gap: '4px',
+    flexShrink: 0
+  },
+  mobileTabBtn: {
+    flex: 1,
+    padding: '8px 4px',
+    backgroundColor: '#1e293b',
+    color: '#94a3b8',
+    border: 'none',
     borderRadius: '6px',
     fontSize: '11px',
     fontWeight: 'bold',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    textAlign: 'center',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  mobileTabBtnActive: {
+    flex: 1,
+    padding: '8px 4px',
+    backgroundColor: '#881337',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    textAlign: 'center',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   },
   mainGrid: {
     flex: 1,
@@ -869,8 +866,7 @@ const styles = {
     fontSize: '11px',
     fontWeight: '800',
     color: '#94a3b8',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
+    textTransform: 'uppercase'
   },
   archiveToggleGroup: {
     display: 'flex',
@@ -905,8 +901,7 @@ const styles = {
     gap: '10px',
     padding: '12px 14px',
     cursor: 'pointer',
-    borderBottom: '1px solid #1e293b',
-    transition: 'background 0.2s'
+    borderBottom: '1px solid #1e293b'
   },
   chatAvatar: {
     width: '36px',
@@ -1071,8 +1066,7 @@ const styles = {
   },
   formTitle: {
     fontSize: '11px',
-    color: '#ffffff',
-    letterSpacing: '0.5px'
+    color: '#ffffff'
   },
   badgeAiReady: {
     fontSize: '9.5px',
