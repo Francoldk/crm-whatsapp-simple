@@ -34,6 +34,11 @@ export default function ModuloVentasCRM() {
             if (!selectedId) {
               setSelectedId(String(data[0].id));
               setFormData(data[0].quoteData || {});
+            } else {
+              const current = data.find((c) => String(c.id) === String(selectedId));
+              if (current && current.quoteData) {
+                setFormData((prev) => ({ ...current.quoteData, ...prev }));
+              }
             }
           }
         }
@@ -51,7 +56,6 @@ export default function ModuloVentasCRM() {
     (c) => String(c.id) === String(selectedId)
   ) || conversations[0] || { messages: [], quoteData: {}, botActive: true };
 
-  // Control estricto de auto-scroll: respeta si estás leyendo arriba
   useEffect(() => {
     if (!isUserScrollingRef.current) {
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,7 +65,6 @@ export default function ModuloVentasCRM() {
   const handleScrollChat = () => {
     if (!chatAreaRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatAreaRef.current;
-    // Si estás a más de 120px del final, estás leyendo historial arriba
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     isUserScrollingRef.current = distanceFromBottom > 120;
   };
@@ -124,12 +127,21 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  const handleStatusChange = (newStatus) => {
+  const handleStatusChange = async (newStatus) => {
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId) ? { ...c, status: newStatus } : c
       )
     );
+    if (selectedConv?.phone) {
+      try {
+        await fetch('/api/whatsapp-webhook', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: selectedConv.phone, status: newStatus })
+        });
+      } catch (_) {}
+    }
   };
 
   const handleTriggerSolAI = async () => {
@@ -153,9 +165,16 @@ export default function ModuloVentasCRM() {
           )
         };
         setFormData(mergedData);
+
         setConversations((prev) =>
           prev.map((c) =>
-            String(c.id) === String(selectedId) ? { ...c, quoteData: mergedData } : c
+            String(c.id) === String(selectedId)
+              ? {
+                  ...c,
+                  quoteData: mergedData,
+                  status: data.suggestedStatus || c.status
+                }
+              : c
           )
         );
 
@@ -165,7 +184,8 @@ export default function ModuloVentasCRM() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               phone: selectedConv.phone,
-              extractedData: mergedData
+              extractedData: mergedData,
+              status: data.suggestedStatus || selectedConv.status
             })
           });
         }
@@ -186,7 +206,6 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Envío manual real a WhatsApp (local port 3001) y base de datos
   const handleSendReply = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv?.phone) return;
@@ -229,6 +248,41 @@ export default function ModuloVentasCRM() {
           sender: 'me'
         })
       }).catch((err) => console.error('Error enviando:', err));
+    }
+  };
+
+  const handleToggleArchive = (id, e) => {
+    e.stopPropagation();
+    setConversations((prev) =>
+      prev.map((c) =>
+        String(c.id) === String(id) ? { ...c, archived: !c.archived } : c
+      )
+    );
+  };
+
+  const handleDeleteConversation = (id, e) => {
+    e.stopPropagation();
+    if (confirm('¿Eliminar conversación?')) {
+      const remaining = conversations.filter((c) => String(c.id) !== String(id));
+      setConversations(remaining);
+      if (String(selectedId) === String(id) && remaining.length > 0) {
+        setSelectedId(String(remaining[0].id));
+        setFormData(remaining[0].quoteData || {});
+      }
+    }
+  };
+
+  const handleRenameConversation = (id, currentName, e) => {
+    e.stopPropagation();
+    const newName = prompt('Nuevo nombre:', currentName);
+    if (newName && newName.trim()) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          String(c.id) === String(id)
+            ? { ...c, name: newName.trim(), quoteData: { ...c.quoteData, clientName: newName.trim() } }
+            : c
+        )
+      );
     }
   };
 
@@ -316,7 +370,7 @@ export default function ModuloVentasCRM() {
         <main
           style={{
             ...styles.mainGrid,
-            gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 390px'
+            gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 400px'
           }}
         >
           {/* BANDEJA DE CONTACTOS */}
@@ -472,13 +526,13 @@ export default function ModuloVentasCRM() {
             </section>
           )}
 
-          {/* FICHA & COTIZADOR */}
+          {/* FICHA TÉCNICA & COTIZACIÓN OPERATIVA */}
           {(!isMobile || mobileTab === 'ficha') && (
             <aside style={styles.colForm}>
               <div style={styles.formHeader}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <strong style={styles.formTitle}>FICHA & COTIZACIÓN</strong>
-                  <span style={styles.badgeAiReady}>VUCE Conectado</span>
+                  <strong style={styles.formTitle}>FICHA DE COTIZACIÓN (OPERACIONES)</strong>
+                  <span style={styles.badgeAiReady}>VUCE Listo</span>
                 </div>
 
                 <button
@@ -491,7 +545,7 @@ export default function ModuloVentasCRM() {
                     cursor: loadingAi ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {loadingAi ? '⏳ Sol completando ficha...' : '⚡ Sol: Autocompletar Ficha'}
+                  {loadingAi ? '⏳ Sol calculando...' : '⚡ Sol: Autocompletar Ficha & Cotizar'}
                 </button>
               </div>
 
@@ -520,10 +574,10 @@ export default function ModuloVentasCRM() {
 
                 <div style={styles.twoCols}>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>Posición Arancelaria (Interno):</label>
+                    <label style={styles.fieldLabel}>Posición Arancelaria (VUCE):</label>
                     <input
                       type="text"
-                      style={{ ...styles.fieldInput, border: '1px solid #059669', color: '#34d399' }}
+                      style={{ ...styles.fieldInput, border: '1px solid #059669', color: '#34d399', fontWeight: 'bold' }}
                       value={formData?.hscode || ''}
                       onChange={(e) => handleFormChange('hscode', e.target.value)}
                       placeholder="Ej: 8418.69.10"
@@ -545,7 +599,7 @@ export default function ModuloVentasCRM() {
 
                 <div style={styles.threeCols}>
                   <div style={styles.fieldItem}>
-                    <label style={styles.fieldLabel}>FOB (USD):</label>
+                    <label style={styles.fieldLabel}>FOB USD:</label>
                     <input
                       type="number"
                       style={styles.fieldInput}
@@ -592,6 +646,62 @@ export default function ModuloVentasCRM() {
                   </select>
                 </div>
 
+                {/* DESGLOSE AUTOMÁTICO DE COSTOS */}
+                <div style={{ backgroundColor: '#0b1120', padding: '10px', borderRadius: '6px', border: '1px solid #1e293b' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                    DESGLOSE ESTIMADO DE LA COTIZACIÓN:
+                  </span>
+                  <div style={styles.threeCols}>
+                    <div style={styles.fieldItem}>
+                      <label style={{ fontSize: '9.5px', color: '#cbd5e1' }}>Flete USD:</label>
+                      <input
+                        type="number"
+                        style={styles.fieldInput}
+                        value={formData?.freightUSD || ''}
+                        onChange={(e) => handleFormChange('freightUSD', e.target.value)}
+                      />
+                    </div>
+                    <div style={styles.fieldItem}>
+                      <label style={{ fontSize: '9.5px', color: '#cbd5e1' }}>Seguro (3%):</label>
+                      <input
+                        type="number"
+                        style={styles.fieldInput}
+                        value={formData?.insuranceUSD || ''}
+                        onChange={(e) => handleFormChange('insuranceUSD', e.target.value)}
+                      />
+                    </div>
+                    <div style={styles.fieldItem}>
+                      <label style={{ fontSize: '9.5px', color: '#cbd5e1' }}>Aranceles (DI/TE):</label>
+                      <input
+                        type="number"
+                        style={styles.fieldInput}
+                        value={formData?.dutiesUSD || ''}
+                        onChange={(e) => handleFormChange('dutiesUSD', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ ...styles.twoCols, marginTop: '6px' }}>
+                    <div style={styles.fieldItem}>
+                      <label style={{ fontSize: '9.5px', color: '#cbd5e1' }}>Impuestos (IVA/IIBB):</label>
+                      <input
+                        type="number"
+                        style={styles.fieldInput}
+                        value={formData?.taxesUSD || ''}
+                        onChange={(e) => handleFormChange('taxesUSD', e.target.value)}
+                      />
+                    </div>
+                    <div style={styles.fieldItem}>
+                      <label style={{ fontSize: '9.5px', color: '#fbbf24', fontWeight: 'bold' }}>TOTAL LOGÍSTICA USD:</label>
+                      <input
+                        type="number"
+                        style={{ ...styles.fieldInput, borderColor: '#f59e0b', color: '#fbbf24', fontWeight: 'bold' }}
+                        value={formData?.totalLogisticsUSD || ''}
+                        onChange={(e) => handleFormChange('totalLogisticsUSD', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div style={styles.fieldItem}>
                   <label style={styles.fieldLabel}>Notas Operativas:</label>
                   <textarea
@@ -615,6 +725,7 @@ export default function ModuloVentasCRM() {
         </main>
       )}
 
+      {/* PESTAÑA ESTADOS CON RESUMEN COMERCIAL */}
       {activeTab === 'estados' && (
         <section style={styles.tabEstadosLayout}>
           <div style={styles.filterButtonGroup}>
@@ -646,6 +757,7 @@ export default function ModuloVentasCRM() {
             <div style={styles.estadosColList}>
               {filteredByStatus.map((conv) => {
                 const isSelected = String(conv.id) === String(selectedId);
+                const q = conv.quoteData || {};
                 return (
                   <button
                     key={conv.id}
@@ -657,11 +769,16 @@ export default function ModuloVentasCRM() {
                       borderColor: isSelected ? '#881337' : '#334155'
                     }}
                   >
-                    <div style={{ textAlign: 'left' }}>
-                      <strong style={{ display: 'block', color: '#fff', fontSize: '13px' }}>
+                    <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+                      <strong style={{ display: 'block', color: '#fff', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {conv.name}
                       </strong>
                       <span style={{ fontSize: '11px', color: '#94a3b8' }}>+{conv.phone}</span>
+                      {q.product && (
+                        <div style={{ fontSize: '11px', color: '#38bdf8', marginTop: '2px' }}>
+                          📦 {q.product}
+                        </div>
+                      )}
                     </div>
                     <span style={styles.badgeStatusMini}>{conv.status}</span>
                   </button>
@@ -691,7 +808,46 @@ export default function ModuloVentasCRM() {
 
                   <hr style={styles.hr} />
 
-                  <div>
+                  {/* TARJETA RESUMEN DE COTIZACIÓN */}
+                  <div style={{ backgroundColor: '#0b1120', border: '1px solid #334155', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+                    <h3 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#38bdf8', textTransform: 'uppercase' }}>
+                      📋 Resumen de Carga & Cotización
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '12px', fontSize: '12px' }}>
+                      <div>
+                        <span style={{ color: '#94a3b8', display: 'block' }}>Producto / Mercadería:</span>
+                        <strong style={{ color: '#fff' }}>{selectedConv.quoteData?.product || 'A definir'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#94a3b8', display: 'block' }}>PA (VUCE):</span>
+                        <strong style={{ color: '#34d399' }}>{selectedConv.quoteData?.hscode || 'Sin PA'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#94a3b8', display: 'block' }}>Peso / Medidas:</span>
+                        <strong style={{ color: '#fff' }}>
+                          {selectedConv.quoteData?.weightKg ? `${selectedConv.quoteData.weightKg} kg` : '-'} | {selectedConv.quoteData?.cbm ? `${selectedConv.quoteData.cbm} m³` : '-'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#94a3b8', display: 'block' }}>FOB Declarado:</span>
+                        <strong style={{ color: '#fff' }}>
+                          {selectedConv.quoteData?.goodsValue ? `USD ${selectedConv.quoteData.goodsValue}` : '-'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#94a3b8', display: 'block' }}>Modalidad Ofrecida:</span>
+                        <strong style={{ color: '#fff' }}>{selectedConv.quoteData?.shippingMode || 'Marítimo'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#fbbf24', display: 'block' }}>TOTAL Cotizado:</span>
+                        <strong style={{ color: '#fbbf24', fontSize: '14px' }}>
+                          {selectedConv.quoteData?.totalLogisticsUSD ? `USD ${selectedConv.quoteData.totalLogisticsUSD}` : 'Sin cotizar'}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '16px' }}>
                     <label style={styles.fieldLabel}>Cambiar Estado:</label>
                     <div style={styles.stateSelectorGrid}>
                       {estadosDisponibles.map((estado) => (
@@ -710,6 +866,15 @@ export default function ModuloVentasCRM() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div style={styles.summaryBox}>
+                    <h4 style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#cbd5e1' }}>
+                      ÚLTIMO MENSAJE REGISTRADO:
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#f1f5f9', fontStyle: 'italic' }}>
+                      "{selectedConv.lastMessage}"
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1098,7 +1263,7 @@ const styles = {
   },
   fieldTextarea: {
     width: '100%',
-    height: '55px',
+    height: '45px',
     boxSizing: 'border-box',
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
@@ -1246,5 +1411,12 @@ const styles = {
     fontSize: '11px',
     fontWeight: 'bold',
     cursor: 'pointer'
+  },
+  summaryBox: {
+    backgroundColor: '#0b1120',
+    border: '1px solid #1e293b',
+    borderRadius: '6px',
+    padding: '12px',
+    marginTop: '10px'
   }
 };
