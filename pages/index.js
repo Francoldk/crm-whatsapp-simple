@@ -219,7 +219,7 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Envío manual universal: envía a WhatsApp y preserva quoteData intacto
+  // Envío manual universal: envía a WhatsApp oficial en Render y preserva quoteData
   const handleSendReply = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv?.phone) return;
@@ -235,7 +235,7 @@ export default function ModuloVentasCRM() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    // Actualización inmediata en pantalla sin perder quoteData
+    // Actualización visual inmediata en pantalla
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId)
@@ -243,21 +243,21 @@ export default function ModuloVentasCRM() {
               ...c,
               lastMessage: messageText,
               messages: [...(c.messages || []), newMsg],
-              quoteData: formData // Mantiene la ficha
+              quoteData: formData
             }
           : c
       )
     );
 
-    // 1. Enviar a bot.js si corre localmente
-    fetch('http://localhost:3001/send', {
+    // 1. Enviar al servidor WhatsApp en Render
+    fetch('https://whatsapp-server-qr.onrender.com/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phone: selectedConv.phone,
         message: messageText
       })
-    }).catch(() => {});
+    }).catch((err) => console.error('Error despachando a Render:', err));
 
     // 2. Guardar en el Webhook pasando la ficha actual para no resetearla
     try {
@@ -268,7 +268,7 @@ export default function ModuloVentasCRM() {
           phone: selectedConv.phone,
           text: messageText,
           sender: 'me',
-          extractedData: formData // Mantiene intacta la ficha
+          extractedData: formData
         })
       });
     } catch (err) {
