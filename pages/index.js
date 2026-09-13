@@ -23,11 +23,11 @@ export default function ModuloVentasCRM() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sincronización continua sin pisar datos locales
+  // Sincronización directa con Supabase (a través de /api/conversations)
   useEffect(() => {
     const fetchConversations = async () => {
       try {
-        const res = await fetch('/api/whatsapp-webhook');
+        const res = await fetch('/api/conversations');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -36,7 +36,6 @@ export default function ModuloVentasCRM() {
               setSelectedId(String(data[0].id));
               setFormData(data[0].quoteData || {});
             } else {
-              // Si el usuario tiene una conversación activa, enriquecer la ficha sin pisarla con vacíos
               const current = data.find((c) => String(c.id) === String(selectedId));
               if (current?.quoteData && Object.keys(current.quoteData).length > 0) {
                 setFormData((prev) => ({
@@ -48,7 +47,7 @@ export default function ModuloVentasCRM() {
           }
         }
       } catch (err) {
-        console.error('Error al sincronizar CRM:', err);
+        console.error('Error al sincronizar CRM con Supabase:', err);
       }
     };
 
@@ -85,7 +84,7 @@ export default function ModuloVentasCRM() {
   };
 
   const handleToggleBotIndividual = async () => {
-    if (!selectedConv?.phone) return;
+    if (!selectedConv?.id) return;
     const nextState = !(selectedConv.botActive !== false);
 
     setConversations((prev) =>
@@ -95,10 +94,10 @@ export default function ModuloVentasCRM() {
     );
 
     try {
-      await fetch('/api/whatsapp-webhook', {
+      await fetch('/api/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: selectedConv.phone, botActive: nextState })
+        body: JSON.stringify({ id: selectedConv.id, botActive: nextState })
       });
     } catch (e) {
       console.error('Error toggle Sol:', e);
@@ -115,16 +114,16 @@ export default function ModuloVentasCRM() {
     );
   };
 
-  // Guardado manual con feedback real y confirmación
+  // Guardado de la ficha técnica directamente en Supabase
   const handleSaveFormDataManual = async () => {
-    if (!selectedConv?.phone) return;
+    if (!selectedConv?.id) return;
     try {
-      const res = await fetch('/api/whatsapp-webhook', {
-        method: 'POST',
+      const res = await fetch('/api/conversations', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: selectedConv.phone,
-          extractedData: formData
+          id: selectedConv.id,
+          quoteData: formData
         })
       });
       if (res.ok) {
@@ -133,7 +132,7 @@ export default function ModuloVentasCRM() {
             String(c.id) === String(selectedId) ? { ...c, quoteData: formData } : c
           )
         );
-        alert('✅ Ficha guardada con éxito en el CRM');
+        alert('✅ Ficha guardada con éxito en la base de datos');
       }
     } catch (err) {
       alert('Error al guardar ficha: ' + err.message);
@@ -146,12 +145,12 @@ export default function ModuloVentasCRM() {
         String(c.id) === String(selectedId) ? { ...c, status: newStatus } : c
       )
     );
-    if (selectedConv?.phone) {
+    if (selectedConv?.id) {
       try {
-        await fetch('/api/whatsapp-webhook', {
+        await fetch('/api/conversations', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: selectedConv.phone, status: newStatus })
+          body: JSON.stringify({ id: selectedConv.id, status: newStatus })
         });
       } catch (_) {}
     }
@@ -191,13 +190,13 @@ export default function ModuloVentasCRM() {
           )
         );
 
-        if (selectedConv?.phone) {
-          await fetch('/api/whatsapp-webhook', {
-            method: 'POST',
+        if (selectedConv?.id) {
+          await fetch('/api/conversations', {
+            method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              phone: selectedConv.phone,
-              extractedData: mergedData,
+              id: selectedConv.id,
+              quoteData: mergedData,
               status: data.suggestedStatus || selectedConv.status
             })
           });
@@ -219,7 +218,7 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Envío manual universal: envía a WhatsApp oficial en Render y preserva quoteData
+  // Envío manual universal: envía vía Render (/send-message) y persiste en Supabase
   const handleSendReply = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv?.phone) return;
@@ -235,7 +234,6 @@ export default function ModuloVentasCRM() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    // Actualización visual inmediata en pantalla
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId)
@@ -249,45 +247,44 @@ export default function ModuloVentasCRM() {
       )
     );
 
-    // 1. Enviar al servidor WhatsApp en Render
-    fetch('https://whatsapp-server-qr.onrender.com/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phone: selectedConv.phone,
-        message: messageText
-      })
-    }).catch((err) => console.error('Error despachando a Render:', err));
-
-    // 2. Guardar en el Webhook pasando la ficha actual para no resetearla
     try {
-      await fetch('/api/whatsapp-webhook', {
+      await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: selectedConv.phone,
-          text: messageText,
-          sender: 'me',
-          extractedData: formData
+          message: messageText,
+          contactId: selectedConv.id
         })
       });
     } catch (err) {
-      console.error('Error registrando respuesta:', err);
+      console.error('Error despachando respuesta manual:', err);
     }
   };
 
-  const handleToggleArchive = (id, e) => {
+  const handleToggleArchive = async (id, e) => {
     e.stopPropagation();
+    const conv = conversations.find((c) => String(c.id) === String(id));
+    const nextArchived = !conv?.archived;
+
     setConversations((prev) =>
       prev.map((c) =>
-        String(c.id) === String(id) ? { ...c, archived: !c.archived } : c
+        String(c.id) === String(id) ? { ...c, archived: nextArchived } : c
       )
     );
+
+    try {
+      await fetch('/api/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, archived: nextArchived })
+      });
+    } catch (_) {}
   };
 
   const handleDeleteConversation = (id, e) => {
     e.stopPropagation();
-    if (confirm('¿Eliminar conversación?')) {
+    if (confirm('¿Ocultar conversación de la vista?')) {
       const remaining = conversations.filter((c) => String(c.id) !== String(id));
       setConversations(remaining);
       if (String(selectedId) === String(id) && remaining.length > 0) {
