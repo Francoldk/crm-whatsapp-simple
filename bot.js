@@ -1,12 +1,88 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const pino = require('pino');
+const PDFParser = require('pdf2json');
 
 const CRM_WEBHOOK_URL = 'https://crm-dcam-produccion.vercel.app/api/whatsapp-webhook';
 const AI_EXTRACT_URL = 'https://crm-dcam-produccion.vercel.app/api/ai-extract';
+const GROQ_API_KEY = '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';
 
 let sockInstance = null;
+
+// Extractor con limpieza de caracteres rotos de pdf2json
+function extractTextFromPdfBuffer(buffer) {
+  return new Promise((resolve) => {
+    try {
+      const pdfParser = new PDFParser(null, 1);
+
+      pdfParser.on('pdfParser_dataError', (errData) => {
+        console.error('⚠️ Error interno parseando PDF:', errData.parserError);
+        resolve(null);
+      });
+
+      pdfParser.on('pdfParser_dataReady', () => {
+        let rawText = pdfParser.getRawTextContent() || '';
+        try {
+          rawText = decodeURIComponent(rawText);
+        } catch (_) {}
+        const cleaned = rawText
+          .replace(/----------------Page \(\d+\) Break----------------/g, ' ')
+          .replace(/\r\n/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        resolve(cleaned || null);
+      });
+
+      pdfParser.parseBuffer(buffer);
+    } catch (err) {
+      console.error('⚠️ Fallo en inicialización de PDFParser:', err.message);
+      resolve(null);
+    }
+  });
+}
+
+async function transcribeAudioWithGroq(audioBuffer) {
+  try {
+    const formData = new FormData();
+    const blob = new Blob([audioBuffer], { type: 'audio/ogg' });
+    formData.append('file', blob, 'audio.ogg');
+    formData.append('model', 'whisper-large-v3');
+    formData.append('language', 'es');
+
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
+      body: formData
+    });
+
+    const data = await res.json();
+    return data.text ? data.text.trim() : null;
+  } catch (err) {
+    console.error('⚠️ Error al transcribir audio en Groq:', err.message);
+    return null;
+  }
+}
+
+async function askSolAI(conversationHistory, imageBase64 = null) {
+  const response = await fetch(AI_EXTRACT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      conversationHistory: conversationHistory || [],
+      imageBase64: imageBase64 || null
+    })
+  });
+
+  const data = await response.json();
+
+  if (response.ok && data?.replyMessage) {
+    return data;
+  }
+
+  const errDetail = data?.details ? JSON.stringify(data.details) : (data?.error || 'Error desconocido');
+  throw new Error(`Fallo de API: ${errDetail}`);
+}
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
@@ -18,28 +94,22 @@ async function connectToWhatsApp() {
   });
 
   sockInstance = sock;
-
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
-
     if (qr) {
-      console.log('\n📲 ESCANEÁ ESTE CÓDIGO QR CON TU WHATSAPP:\n');
+      console.log('\n📲 ESCANEÁ ESTE QR:\n');
       qrcode.generate(qr, { small: true });
     }
-
     if (connection === 'open') {
       console.log('✅ ¡WHATSAPP CONECTADO CON ÉXITO AL CRM!');
     }
-
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      console.log(`⚠️ Conexión cerrada (${statusCode || 'error'}). Reconectando en 5s...`, shouldReconnect);
-      if (shouldReconnect) {
-        setTimeout(connectToWhatsApp, 5000);
-      }
+      console.log(`⚠️ Conexión cerrada (${statusCode || 'error'}). Reconectando...`);
+      if (shouldReconnect) setTimeout(connectToWhatsApp, 5000);
     }
   });
 
@@ -53,104 +123,160 @@ async function connectToWhatsApp() {
 
       const cleanPhone = remoteJid.replace(/\D/g, '');
       const clientName = msg.pushName || `+${cleanPhone}`;
-      const text =
+      const msgType = Object.keys(msg.message || {})[0];
+
+      let text =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        msg.message?.documentMessage?.caption ||
         '';
 
-      if (!text.trim()) return;
+      let imageBase64 = null;
 
-      console.log(`📩 Mensaje entrante de ${clientName} (${cleanPhone}): ${text}`);
+      // 🎙️ Procesar Audio
+      if (msgType === 'audioMessage') {
+        console.log(`🎙️ Recibido audio de ${clientName}, transcribiendo...`);
+        try {
+          const buffer = await downloadMediaMessage(
+            msg,
+            'buffer',
+            {},
+            { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+          );
+          const transcription = await transcribeAudioWithGroq(buffer);
+          if (transcription) {
+            console.log(`📝 Transcripción: "${transcription}"`);
+            text = `[Audio del cliente]: ${transcription}`;
+          } else {
+            text = '[El cliente envió una nota de voz inaudible]';
+          }
+        } catch (mediaErr) {
+          text = '[El cliente envió un audio]';
+        }
+      }
 
-      // 1. Guardar mensaje entrante en el CRM
+      // 📸 Procesar Imagen con visión multimodal
+      if (msgType === 'imageMessage') {
+        console.log(`📸 Descargando imagen de ${clientName} para visión multimodal...`);
+        try {
+          const buffer = await downloadMediaMessage(
+            msg,
+            'buffer',
+            {},
+            { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+          );
+          imageBase64 = buffer.toString('base64');
+          if (!text.trim()) {
+            text = '[El cliente adjuntó una imagen/foto]';
+          }
+        } catch (mediaErr) {
+          console.error('Error descargando imagen:', mediaErr.message);
+        }
+      }
+
+      // 📄 Procesar Documento PDF (Proforma, Packing List, Factura)
+      if (msgType === 'documentMessage') {
+        const fileName = msg.message?.documentMessage?.fileName || '';
+        const mimetype = msg.message?.documentMessage?.mimetype || '';
+
+        if (mimetype.includes('pdf') || fileName.toLowerCase().endsWith('.pdf')) {
+          console.log(`📄 Descargando y procesando PDF de ${clientName} (${fileName})...`);
+          try {
+            const buffer = await downloadMediaMessage(
+              msg,
+              'buffer',
+              {},
+              { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+            );
+
+            const rawText = await extractTextFromPdfBuffer(buffer);
+
+            if (rawText && rawText.length > 20) {
+              console.log(`📑 Texto extraído con éxito del PDF (${rawText.length} caracteres).`);
+              text = `[Documento PDF adjunto: ${fileName}]:\n${rawText.slice(0, 3500)}`;
+            } else {
+              text = `[El cliente adjuntó el documento PDF "${fileName}", pero no contiene texto seleccionable. Solicitale amablemente los datos principales: producto, valor FOB en USD, peso en kg y volumen].`;
+            }
+          } catch (docErr) {
+            console.error('Error leyendo documento PDF:', docErr.message);
+            text = `[El cliente adjuntó el documento PDF "${fileName}"].`;
+          }
+        }
+      }
+
+      if (!text.trim() && !imageBase64) return;
+
+      console.log(`📩 Mensaje de ${clientName} (${cleanPhone}): ${text.slice(0, 120)}...`);
+
+      // 1. Guardar mensaje en el CRM
       const res = await fetch(CRM_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          name: clientName,
-          text: text,
-          sender: 'client'
-        })
+        body: JSON.stringify({ phone: cleanPhone, name: clientName, text, sender: 'client' })
       });
-
       const data = await res.json();
       const conv = data?.conversation;
 
-      // 2. Si Sol está pausada para este chat, cortar acá
       if (conv && conv.botActive === false) {
-        console.log(`⏸️ Sol está pausada para ${clientName}. Atención manual.`);
+        console.log(`⏸️ Sol en pausa para ${clientName}.`);
         return;
       }
 
-      // 3. Consultar a Sol (Gemini AI)
-      console.log(`🤖 Sol generando respuesta para ${clientName}...`);
-      const aiRes = await fetch(AI_EXTRACT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationHistory: conv?.messages || [{ sender: 'client', text }]
-        })
-      });
+      console.log(`🤖 Sol analizando conversación para ${clientName}...`);
 
-      if (aiRes.ok) {
-        const aiData = await aiRes.json();
-        if (aiData.replyMessage) {
-          await sock.sendMessage(remoteJid, { text: aiData.replyMessage });
+      const history = conv?.messages?.length
+        ? conv.messages
+        : [{ sender: 'client', text }];
 
-          await fetch(CRM_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              phone: cleanPhone,
-              text: aiData.replyMessage,
-              sender: 'me'
-            })
-          });
-          console.log(`✅ Sol respondió a ${clientName}`);
-        }
-      } else {
-        const errText = await aiRes.text();
-        console.error('❌ Error devuelto por el endpoint de IA:', errText);
+      const aiData = await askSolAI(history, imageBase64);
+
+      if (aiData?.replyMessage) {
+        // 2. Responder por WhatsApp
+        await sock.sendMessage(remoteJid, { text: aiData.replyMessage });
+
+        // 3. Registrar respuesta y datos extraídos en el CRM
+        await fetch(CRM_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: cleanPhone,
+            text: aiData.replyMessage,
+            sender: 'me',
+            extractedData: aiData.extractedData || null
+          })
+        });
+        console.log(`✅ Sol respondió a ${clientName}`);
       }
     } catch (error) {
-      console.error('Error al procesar mensaje entrante:', error);
+      console.error('❌ Error procesando mensaje:', error.message);
     }
   });
 }
 
-// Servidor Express
 const app = express();
 app.use(express.json());
 
 app.post('/send', async (req, res) => {
   const { phone, message } = req.body;
   try {
-    if (!sockInstance) {
-      return res.status(503).json({ error: 'WhatsApp no conectado' });
-    }
+    if (!sockInstance) return res.status(503).json({ error: 'WhatsApp no conectado' });
     const cleanPhone = phone.replace(/\D/g, '');
-    const id = `${cleanPhone}@s.whatsapp.net`;
-    await sockInstance.sendMessage(id, { text: message });
+    await sockInstance.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: message });
 
     await fetch(CRM_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phone: cleanPhone,
-        text: message,
-        sender: 'me'
-      })
+      body: JSON.stringify({ phone: cleanPhone, text: message, sender: 'me' })
     }).catch(() => {});
 
     res.send({ status: 'ok' });
   } catch (err) {
-    console.error('Error al despachar mensaje:', err);
     res.status(500).send({ error: 'Fallo al enviar' });
   }
 });
 
 app.listen(3001, () => {
-  console.log('🚀 Servidor local de despacho activo en puerto 3001');
+  console.log('🚀 Servidor local activo en puerto 3001');
   connectToWhatsApp();
 });

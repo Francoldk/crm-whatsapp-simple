@@ -11,32 +11,40 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // GET: Traer contactos con sus mensajes desde Supabase
   if (req.method === 'GET') {
     try {
+      // 1. Traer contactos
       const { data: contacts, error: errContacts } = await supabase
         .from('contacts')
-        .select('*')
-        .order('updated_at', { ascending: false });
+        .select('*');
 
-      if (errContacts) throw errContacts;
+      if (errContacts) {
+        console.error('Error contactos:', errContacts);
+        return res.status(500).json({ error: errContacts.message });
+      }
 
+      // 2. Traer mensajes sin forzar created_at (por si la columna tiene otro nombre)
       const { data: messages, error: errMsgs } = await supabase
         .from('messages')
-        .select('*')
-        .order('created_at', { ascending: true });
+        .select('*');
 
-      if (errMsgs) throw errMsgs;
+      if (errMsgs) {
+        console.warn('Advertencia leyendo messages:', errMsgs.message);
+      }
 
-      // Agrupar mensajes por contacto
+      const allMessages = messages || [];
+
+      // 3. Formatear y asociar mensajes a cada contacto
       const formatted = (contacts || []).map((c) => {
-        const cMessages = (messages || [])
+        const cMessages = allMessages
           .filter((m) => String(m.contact_id) === String(c.id))
           .map((m) => ({
-            id: m.id,
+            id: m.id || Date.now(),
             sender: m.sender === 'client' ? 'client' : 'me',
-            text: m.text,
-            time: new Date(m.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            text: m.text || '',
+            time: m.created_at 
+              ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : (m.timestamp || '')
           }));
 
         return {
@@ -44,7 +52,9 @@ export default async function handler(req, res) {
           phone: (c.phone || '').replace(/\D/g, ''),
           name: c.name || c.phone || 'Contacto',
           status: c.status || 'Nuevo Lead',
-          time: new Date(c.updated_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: c.updated_at 
+            ? new Date(c.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+            : '',
           lastMessage: c.last_message || (cMessages[cMessages.length - 1]?.text) || '',
           messages: cMessages,
           quoteData: c.quote_data || {},
@@ -55,18 +65,17 @@ export default async function handler(req, res) {
 
       return res.status(200).json(formatted);
     } catch (error) {
-      console.error('Error leyendo Supabase:', error.message);
+      console.error('Fallo en conversations.js:', error.message);
       return res.status(500).json({ error: error.message });
     }
   }
 
-  // PATCH: Actualizar estado, ficha o pausa de Sol
   if (req.method === 'PATCH') {
     const { id, status, quoteData, botActive, archived } = req.body;
     if (!id) return res.status(400).json({ error: 'Falta el id del contacto' });
 
     try {
-      const updatePayload = { updated_at: new Date().toISOString() };
+      const updatePayload = {};
       if (status) updatePayload.status = status;
       if (typeof botActive === 'boolean') updatePayload.bot_active = botActive;
       if (typeof archived === 'boolean') updatePayload.archived = archived;
