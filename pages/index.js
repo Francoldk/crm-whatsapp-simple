@@ -218,10 +218,14 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Envío manual universal: envía vía Render (/send-message) y persiste en Supabase
+  // Envío manual universal: envía vía Render (/send) y persiste en Supabase
   const handleSendReply = async (e) => {
     e.preventDefault();
-    if (!inputReply.trim() || !selectedConv?.phone) return;
+    const targetPhone = selectedConv?.phone || selectedConv?.jid || selectedConv?.id;
+    if (!inputReply.trim() || !targetPhone) {
+      console.warn('Falta mensaje o número de teléfono del contacto');
+      return;
+    }
 
     const messageText = inputReply.trim();
     setInputReply('');
@@ -247,18 +251,35 @@ export default function ModuloVentasCRM() {
       )
     );
 
+    // 1. Envío físico a WhatsApp a través del servidor en Render
     try {
-      await fetch('/api/messages', {
+      fetch('https://whatsapp-server-qr.onrender.com/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: selectedConv.phone,
-          message: messageText,
-          contactId: selectedConv.id
+          phone: targetPhone,
+          message: messageText
+        })
+      }).catch((err) => console.error('Error despachando a Render:', err));
+    } catch (err) {
+      console.error('Error enviando mensaje a Render:', err);
+    }
+
+    // 2. Persistencia en Supabase mediante /api/conversations
+    try {
+      await fetch('/api/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedConv.id,
+          phone: targetPhone,
+          lastMessage: messageText,
+          messages: [...(selectedConv.messages || []), newMsg],
+          quoteData: formData
         })
       });
     } catch (err) {
-      console.error('Error despachando respuesta manual:', err);
+      console.error('Error persistiendo mensaje en BD:', err);
     }
   };
 
