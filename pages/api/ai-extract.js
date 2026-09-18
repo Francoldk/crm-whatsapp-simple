@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).end();
 
-  const apiKey = process.env.GROQ_API_KEY || "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";
+  const apiKey = process.env.GROQ_API_KEY || "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";
   const { conversationHistory, imageBase64 } = req.body;
 
   const systemInstruction = `
