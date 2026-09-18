@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).end();
 
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY || "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";
   const { conversationHistory, imageBase64 } = req.body;
 
   const systemInstruction = `
@@ -114,7 +114,7 @@ RESPONDE EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA:
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "llama-3.1-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: messages,
         temperature: 0.2,
         max_tokens: 1500,
