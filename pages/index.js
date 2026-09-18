@@ -218,7 +218,7 @@ export default function ModuloVentasCRM() {
     }
   };
 
-  // Envío manual universal: envía vía Render (/send) y persiste en Supabase
+  // Envío manual universal: despacha vía proxy interno (/api/send-message) y persiste en Supabase
   const handleSendReply = async (e) => {
     e.preventDefault();
     const targetPhone = selectedConv?.phone || selectedConv?.jid || selectedConv?.id;
@@ -238,6 +238,7 @@ export default function ModuloVentasCRM() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
+    // Actualización visual inmediata en pantalla
     setConversations((prev) =>
       prev.map((c) =>
         String(c.id) === String(selectedId)
@@ -251,22 +252,23 @@ export default function ModuloVentasCRM() {
       )
     );
 
-    // 1. Envío físico a WhatsApp a través del servidor en Render
     try {
-      fetch('https://whatsapp-server-qr.onrender.com/send', {
+      // 1. Despachar a través del proxy interno de Vercel (evita bloqueos de red y CORS)
+      const res = await fetch('/api/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: targetPhone,
-          message: messageText
+          message: messageText,
+          contactId: selectedConv.id
         })
-      }).catch((err) => console.error('Error despachando a Render:', err));
-    } catch (err) {
-      console.error('Error enviando mensaje a Render:', err);
-    }
+      });
 
-    // 2. Persistencia en Supabase mediante /api/conversations
-    try {
+      if (!res.ok) {
+        console.error('Aviso: el servidor devolvió un estado no exitoso al enviar mensaje');
+      }
+
+      // 2. Persistir en la base de datos (Supabase)
       await fetch('/api/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -279,7 +281,7 @@ export default function ModuloVentasCRM() {
         })
       });
     } catch (err) {
-      console.error('Error persistiendo mensaje en BD:', err);
+      console.error('Error en el flujo de envío manual:', err);
     }
   };
 
