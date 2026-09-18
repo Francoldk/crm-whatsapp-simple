@@ -235,7 +235,7 @@ export default function ModuloVentasCRM() {
       id: Date.now(),
       sender: 'me',
       text: messageText,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit', hour12: true })
     };
 
     // Actualización visual inmediata en pantalla
