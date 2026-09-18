@@ -114,28 +114,25 @@ RESPONDE EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA:
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "llama-3.3-70b-versatile",
         messages: messages,
         temperature: 0.2,
-        max_tokens: 750
+        max_tokens: 1500,
+        response_format: { type: "json_object" }
       })
     });
 
     const data = await response.json();
 
-    if (!response.ok && data?.error?.failed_generation) {
-      return res.status(200).json({
-        replyMessage: data.error.failed_generation.replace(/```json/g, "").replace(/```/g, "").trim(),
-        suggestedStatus: "Cotizado",
-        extractedData: {}
-      });
+    if (!response.ok) {
+      console.error("Error devuelto por Groq:", data);
+      return res.status(502).json({ error: "Fallo de Groq", details: data });
     }
 
-    if (response.ok && data.choices?.[0]?.message?.content) {
+    if (data.choices?.[0]?.message?.content) {
       const raw = data.choices[0].message.content.trim();
       try {
-        const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-        const parsed = JSON.parse(cleaned);
+        const parsed = JSON.parse(raw);
         return res.status(200).json(parsed);
       } catch {
         return res.status(200).json({
@@ -146,8 +143,9 @@ RESPONDE EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO CON ESTA ESTRUCTURA:
       }
     }
 
-    return res.status(502).json({ error: "Fallo de Groq", details: data });
+    return res.status(500).json({ error: "Respuesta vacía de Groq" });
   } catch (e) {
+    console.error("Error interno en ai-extract:", e);
     return res.status(500).json({ error: "Error interno", details: e.message });
   }
 }
