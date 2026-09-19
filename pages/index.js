@@ -38,9 +38,10 @@ export default function ModuloVentasCRM() {
             } else {
               const current = data.find((c) => String(c.id) === String(selectedId));
               if (current?.quoteData && Object.keys(current.quoteData).length > 0) {
+                // CORRECCIÓN: Los datos que vienen de la DB (current) deben pisar el estado local (prev)
                 setFormData((prev) => ({
-                  ...current.quoteData,
-                  ...prev
+                  ...prev,
+                  ...current.quoteData
                 }));
               }
             }
