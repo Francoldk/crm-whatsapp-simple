@@ -27,7 +27,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama-3.1-70b-versatile', // Modelo principal que veníamos usando
+        model: 'llama-3.3-70b-versatile', // <-- VERSIÓN ACTUALIZADA ACÁ
         messages,
         temperature: 0.3,
         response_format: { type: "json_object" }
