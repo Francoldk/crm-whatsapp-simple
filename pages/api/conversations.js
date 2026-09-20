@@ -1,98 +1,73 @@
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://jcnsepbalxyscxrsyade.supabase.co';
-const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_kVLvltX-K4yGF2VRPaGDaA_KBkmT78W';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,PATCH,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
+  const session = await getServerSession(req, res, authOptions);
+  if (!session) return res.status(401).json({ error: 'No autorizado' });
 
   if (req.method === 'GET') {
     try {
-      // 1. Traer contactos
-      const { data: contacts, error: errContacts } = await supabase
-        .from('contacts')
-        .select('*');
+      const isAdmin = session.user.role === 'admin';
+      const userId = session.user.id;
 
-      if (errContacts) {
-        console.error('Error contactos:', errContacts);
-        return res.status(500).json({ error: errContacts.message });
+      // Traer contactos según el rol
+      let query = supabase.from('contacts').select('*, messages(*)').order('updated_at', { ascending: false });
+      if (!isAdmin) {
+        query = query.eq('assigned_to', userId);
       }
 
-      // 2. Traer mensajes sin forzar created_at (por si la columna tiene otro nombre)
-      const { data: messages, error: errMsgs } = await supabase
-        .from('messages')
-        .select('*');
+      const { data: contacts, error } = await query;
+      if (error) throw error;
 
-      if (errMsgs) {
-        console.warn('Advertencia leyendo messages:', errMsgs.message);
-      }
-
-      const allMessages = messages || [];
-
-      // 3. Formatear y asociar mensajes a cada contacto
-      const formatted = (contacts || []).map((c) => {
-        const cMessages = allMessages
-          .filter((m) => String(m.contact_id) === String(c.id))
-          .map((m) => ({
-            id: m.id || Date.now(),
-            sender: m.sender === 'client' ? 'client' : 'me',
-            text: m.text || '',
-            time: m.created_at 
-              ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : (m.timestamp || '')
-          }));
-
-        return {
-          id: String(c.id),
-          phone: (c.phone || '').replace(/\D/g, ''),
-          name: c.name || c.phone || 'Contacto',
-          status: c.status || 'Nuevo Lead',
-          time: c.updated_at 
-            ? new Date(c.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-            : '',
-          lastMessage: c.last_message || (cMessages[cMessages.length - 1]?.text) || '',
-          messages: cMessages,
-          quoteData: c.quote_data || {},
-          botActive: c.bot_active !== false,
-          archived: c.archived || false
-        };
-      });
+      const formatted = contacts.map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        jid: c.jid,
+        status: c.status,
+        lastMessage: c.last_message,
+        botActive: c.bot_active,
+        quoteData: c.quote_data || {},
+        assignedTo: c.assigned_to,
+        time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' }) : '',
+        messages: (c.messages || []).map(m => ({
+          id: m.id,
+          sender: m.sender,
+          text: m.text,
+          time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' }) : ''
+        })).sort((a, b) => a.id - b.id)
+      }));
 
       return res.status(200).json(formatted);
-    } catch (error) {
-      console.error('Fallo en conversations.js:', error.message);
-      return res.status(500).json({ error: error.message });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
   }
 
   if (req.method === 'PATCH') {
-    const { id, status, quoteData, botActive, archived } = req.body;
-    if (!id) return res.status(400).json({ error: 'Falta el id del contacto' });
+    const { id, quoteData, botActive, status, lastMessage, assignedTo, name } = req.body;
+    if (!id) return res.status(400).json({ error: 'Falta id' });
 
-    try {
-      const updatePayload = {};
-      if (status) updatePayload.status = status;
-      if (typeof botActive === 'boolean') updatePayload.bot_active = botActive;
-      if (typeof archived === 'boolean') updatePayload.archived = archived;
-      if (quoteData) updatePayload.quote_data = quoteData;
+    const payload = { updated_at: new Date().toISOString() };
+    if (quoteData !== undefined) payload.quote_data = quoteData;
+    if (botActive !== undefined) payload.bot_active = botActive;
+    if (status !== undefined) payload.status = status;
+    if (lastMessage !== undefined) payload.last_message = lastMessage;
+    if (assignedTo !== undefined) payload.assigned_to = assignedTo;
+    if (name !== undefined) payload.name = name;
 
-      const { data, error } = await supabase
-        .from('contacts')
-        .update(updatePayload)
-        .eq('id', id)
-        .select()
-        .single();
+    const { error } = await supabase.from('contacts').update(payload).eq('id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
 
-      if (error) throw error;
-      return res.status(200).json({ success: true, contact: data });
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
+  if (req.method === 'DELETE') {
+    const { id } = req.body;
+    await supabase.from('contacts').delete().eq('id', id);
+    return res.status(200).json({ success: true });
   }
 
   return res.status(405).json({ error: 'Método no permitido' });
