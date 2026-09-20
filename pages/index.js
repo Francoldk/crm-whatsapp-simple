@@ -287,6 +287,7 @@ export default function CRM() {
                     onMouseLeave={() => setHoveredId(null)}
                     style={{
                       ...styles.convItem,
+                      position: 'relative',
                       background: isSelected ? 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(6,182,212,0.06))' : 'transparent',
                       borderLeft: isSelected ? '3px solid #8b5cf6' : '3px solid transparent',
                     }}
@@ -310,7 +311,7 @@ export default function CRM() {
                       </div>
                     </div>
                     {isHovered && (
-                      <div style={styles.convActions}>
+                      <div style={{ ...styles.convActions, position: 'absolute', right: '10px', top: '15px', display: 'flex', gap: '5px', zIndex: 10 }}>
                         <button onClick={(e) => handleRename(conv, e)} style={styles.actionBtn}>✏️</button>
                         <button onClick={(e) => handleDelete(conv, e)} style={{ ...styles.actionBtn, ...styles.actionBtnDanger }}>🗑️</button>
                       </div>
