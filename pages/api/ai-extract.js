@@ -20,55 +20,46 @@ export default async function handler(req, res) {
   ];
 
   try {
-    const groqRes = await fetch('[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)', {
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages,
-        temperature: 0.3,
-        response_format: { type: "json_object" }
+        model: "qwen/qwen3.8-27b", // Tu modelo original y seguro
+        messages: messages,
+        temperature: 0.7,        // Tus parámetros de calidez
+        top_p: 0.85,             
+        max_tokens: 1200,        
+        reasoning_effort: "none" 
       })
     });
 
+    const data = await groqRes.json();
+
     if (!groqRes.ok) {
-      const errText = await groqRes.text();
-      throw new Error(`Groq API Error: ${errText}`);
+      console.error("Fallo de Groq:", data);
+      return res.status(500).json({ error: "Fallo de Groq", details: data });
     }
 
-    const groqData = await groqRes.json();
-    let rawContent = groqData.choices[0].message.content;
-
-    // 1. Limpiar posibles markdown fences que agrega Groq por error
-    rawContent = rawContent.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
-
-    // 2. Intentar parsear el JSON con defensas
-    let content;
+    const raw = data.choices[0].message.content.trim();
+    let parsed;
+    
+    // Parseo simple con red de seguridad
     try {
-      content = JSON.parse(rawContent);
-    } catch (parseError) {
-      console.error('JSON inválido de Groq. Raw:', rawContent);
-      
-      // Plan B: intentar reparar comillas triples de Python
-      const repaired = rawContent.replace(/"""([\s\S]*?)"""/g, (m, p1) => JSON.stringify(p1));
-      try {
-        content = JSON.parse(repaired);
-      } catch (e2) {
-        // Plan C SALVAVIDAS: Si todo falla, no tiramos 500. Devolvemos un objeto válido 
-        // para que Render no aborte y el mensaje se guarde en Supabase.
-        console.error(`Groq devolvió JSON irrecuperable: ${rawContent.substring(0, 200)}`);
-        content = {
-          replyMessage: "Estoy procesando tu solicitud, dame un momento por favor. ⏳",
-          suggestedStatus: "Revisar Manualmente",
-          extractedData: {}
-        };
-      }
+      const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      // Si por algún motivo escupe texto en vez de JSON, lo atajamos acá sin tirar 500
+      parsed = {
+        replyMessage: raw,
+        suggestedStatus: "Revisar Manualmente",
+        extractedData: {}
+      };
     }
 
-    return res.status(200).json(content);
+    return res.status(200).json(parsed);
   } catch (error) {
     console.error('Error general en Sol AI:', error);
     return res.status(500).json({ error: error.message });
