@@ -9,8 +9,10 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.112.4",
+    "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
     "next": "14.0.0",
+    "next-auth": "^4.24.15",
     "pdf-parse": "^2.4.5",
     "pdf2json": "^4.0.3",
     "pino": "^10.3.1",
