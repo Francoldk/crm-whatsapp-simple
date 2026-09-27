@@ -106,7 +106,23 @@ export default async function handler(req, res) {
           }]);
       }
 
-      return res.status(200).json({ success: true });
+      // 5. MEMORIA ACTIVADA: Buscamos los últimos 6 mensajes de la conversación
+      const { data: history } = await supabase
+        .from('messages')
+        .select('sender, text')
+        .eq('contact_id', contact.id)
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      // Enviamos el historial ordenado cronológicamente a Render para que Sol no pierda el hilo
+      return res.status(200).json({ 
+        success: true, 
+        conversation: {
+          botActive: contact.bot_active,
+          messages: history ? history.reverse() : []
+        }
+      });
+      
     } catch (error) {
       console.error("Error en webhook POST:", error);
       return res.status(500).json({ error: error.message });
