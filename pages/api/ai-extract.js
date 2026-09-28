@@ -13,17 +13,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Falta el historial de conversación" });
   }
 
-  // 🔥 TRUCO ANTI-AMNESIA: Convertimos el historial en un guion de texto claro
+  // TRUCO ANTI-AMNESIA: Convertimos el historial en un guion de texto claro
   const transcript = conversationHistory.map(msg =>
     `${msg.sender === 'client' || msg.sender === 'user' ? 'Cliente' : 'Sol'}: ${msg.text}`
   ).join('\n');
 
-  // Le inyectamos el guion directo a las reglas del sistema para obligar a Llama a leerlo
+  // Le inyectamos el guion directo a las reglas del sistema
   const systemWithMemory = `${SOL_SYSTEM_PROMPT}\n\n━━━ HISTORIAL DE CONVERSACIÓN ━━━\n${transcript}\n\nIMPORTANTE: Lee el historial de arriba detalladamente. Extraé el peso, producto y valor FOB de esa charla. NO vuelvas a preguntar lo que el Cliente ya dijo ahí. NO saludes de nuevo si ya hay mensajes previos.`;
 
   const messages = [{ role: "system", content: systemWithMemory }];
 
-  // Solo le pasamos como "user" el último mensaje para que no se maree
+  // Solo le pasamos como "user" el último mensaje
   const lastMsg = conversationHistory[conversationHistory.length - 1];
   const isClient = lastMsg?.sender === "client" || lastMsg?.sender === "user";
 
@@ -51,9 +51,9 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.1-8b-instant", // <-- Modelo súper estable y sin amnesia
+        model: "qwen/qwen3.8-27b", // VOLVEMOS AL MODELO SEGURO
         messages: messages,
-        temperature: 0.3, // Bajamos la temperatura para que no invente
+        temperature: 0.3,
         max_tokens: 1200
       })
     });
