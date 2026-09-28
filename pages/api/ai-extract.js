@@ -55,7 +55,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "qwen/qwen3.8-27b",
         messages: messages,
         temperature: 0.7,
         top_p: 0.85,
