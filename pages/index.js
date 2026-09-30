@@ -84,7 +84,6 @@ export default function CRM() {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedConv?.messages?.length]);
 
-  // AUTOCOMPLETADO SOL AI
   const handleTriggerSolAI = async () => {
     if (!selectedConv?.messages || selectedConv.messages.length === 0) return;
     setLoadingAi(true);
@@ -135,13 +134,11 @@ export default function CRM() {
     );
 
     try {
-      // Usamos el proxy de Vercel a Render
       await fetch('/api/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: targetPhone, message: text, contactId: selectedConv.id }),
       });
-      // Guardar en la DB de Supabase
       await fetch('/api/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -222,6 +219,59 @@ export default function CRM() {
 
   return (
     <div style={styles.container}>
+      <style jsx>{`
+        .responsive-grid {
+          flex: 1;
+          display: grid;
+          grid-template-columns: 340px 1fr 400px;
+          min-height: 0;
+          overflow: hidden;
+          z-index: 1;
+          position: relative;
+        }
+        .col-inbox {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          border-right: 1px solid rgba(51,65,85,0.4);
+        }
+        .col-chat {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          border-right: 1px solid rgba(51,65,85,0.4);
+        }
+        .col-form {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        @media (max-width: 1024px) {
+          .responsive-grid {
+            display: flex !important;
+            flex-direction: column !important;
+            overflow-y: auto !important;
+          }
+          .col-inbox {
+            height: 35vh !important;
+            flex: none !important;
+            border-right: none !important;
+            border-bottom: 2px solid rgba(51,65,85,0.6) !important;
+          }
+          .col-chat {
+            height: 65vh !important;
+            flex: none !important;
+            border-right: none !important;
+            border-bottom: 2px solid rgba(51,65,85,0.6) !important;
+          }
+          .col-form {
+            flex: none !important;
+            min-height: auto !important;
+          }
+        }
+      `}</style>
+
       <div style={styles.bgGlow1} />
       <div style={styles.bgGlow2} />
 
@@ -257,8 +307,8 @@ export default function CRM() {
       </header>
 
       {activeTab === 'chat' && (
-        <main style={styles.grid}>
-          <aside style={styles.colInbox}>
+        <main className="responsive-grid">
+          <aside className="col-inbox" style={styles.colInboxBg}>
             <div style={styles.inboxHeader}>
               <input
                 type="text"
@@ -287,7 +337,6 @@ export default function CRM() {
                     onMouseLeave={() => setHoveredId(null)}
                     style={{
                       ...styles.convItem,
-                      position: 'relative',
                       background: isSelected ? 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(6,182,212,0.06))' : 'transparent',
                       borderLeft: isSelected ? '3px solid #8b5cf6' : '3px solid transparent',
                     }}
@@ -311,7 +360,7 @@ export default function CRM() {
                       </div>
                     </div>
                     {isHovered && (
-                      <div style={{ ...styles.convActions, position: 'absolute', right: '10px', top: '15px', display: 'flex', gap: '5px', zIndex: 10 }}>
+                      <div style={{ ...styles.convActions }}>
                         <button onClick={(e) => handleRename(conv, e)} style={styles.actionBtn}>✏️</button>
                         <button onClick={(e) => handleDelete(conv, e)} style={{ ...styles.actionBtn, ...styles.actionBtnDanger }}>🗑️</button>
                       </div>
@@ -322,7 +371,7 @@ export default function CRM() {
             </div>
           </aside>
 
-          <section style={styles.colChat}>
+          <section className="col-chat" style={styles.colChatBg}>
             {selectedConv ? (
               <>
                 <div style={styles.chatHeader}>
@@ -394,7 +443,7 @@ export default function CRM() {
             )}
           </section>
 
-          <aside style={styles.colForm}>
+          <aside className="col-form" style={styles.colFormBg}>
             <div style={styles.formHeader}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -497,14 +546,17 @@ const styles = {
   statDot: { width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e' },
   btnAdmin: { background: 'rgba(6,182,212,0.15)', color: '#67e8f9', border: '1px solid rgba(6,182,212,0.3)', padding: '6px 14px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer' },
   btnLogout: { background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', padding: '6px 14px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer' },
-  grid: { flex: 1, display: 'grid', gridTemplateColumns: '340px 1fr 400px', minHeight: 0, overflow: 'hidden', zIndex: 1, position: 'relative' },
-  colInbox: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)', borderRight: '1px solid rgba(51,65,85,0.4)', display: 'flex', flexDirection: 'column', minHeight: 0 },
+  
+  colInboxBg: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)' },
+  colChatBg: { background: 'rgba(5,7,13,0.4)' },
+  colFormBg: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)' },
+  
   inboxHeader: { padding: '14px', borderBottom: '1px solid rgba(51,65,85,0.3)' },
   searchInput: { width: '100%', padding: '10px 14px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(51,65,85,0.6)', borderRadius: '10px', color: '#e2e8f0', fontSize: '12.5px', outline: 'none', boxSizing: 'border-box' },
   list: { flex: 1, overflowY: 'auto', minHeight: 0 },
   emptyState: { padding: '60px 20px', textAlign: 'center', fontSize: '13px', color: '#64748b' },
   convItem: { display: 'flex', gap: '12px', padding: '14px', cursor: 'pointer', borderBottom: '1px solid rgba(51,65,85,0.25)', transition: 'background 0.15s', position: 'relative' },
-  convActions: { position: 'absolute', top: '10px', right: '15px', display: 'flex', gap: '5px', zIndex: 2 },
+  convActions: { position: 'absolute', top: '10px', right: '15px', display: 'flex', gap: '5px', zIndex: 10 },
   actionBtn: { width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(30,41,59,0.9)', border: '1px solid rgba(51,65,85,0.7)', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 },
   actionBtnDanger: { background: 'rgba(127,29,29,0.9)', border: '1px solid rgba(239,68,68,0.5)' },
   avatar: { width: '42px', height: '42px', borderRadius: '12px', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '16px', flexShrink: 0 },
@@ -515,7 +567,6 @@ const styles = {
   convSnippet: { margin: '4px 0 0 0', fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   statusBadge: { fontSize: '9.5px', fontWeight: 700, padding: '3px 9px', borderRadius: '20px', display: 'inline-block' },
   assignedBadge: { fontSize: '9.5px', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', background: 'rgba(6,182,212,0.12)', color: '#67e8f9', border: '1px solid rgba(6,182,212,0.3)', display: 'inline-block' },
-  colChat: { background: 'rgba(5,7,13,0.4)', display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: '1px solid rgba(51,65,85,0.4)' },
   chatHeader: { padding: '14px 20px', background: 'rgba(15,23,42,0.7)', borderBottom: '1px solid rgba(51,65,85,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   chatTitle: { margin: 0, fontSize: '14.5px', color: '#f1f5f9', fontWeight: 600 },
   chatPhone: { fontSize: '11.5px', color: '#64748b' },
@@ -528,7 +579,6 @@ const styles = {
   chatInputBar: { padding: '16px 20px', background: 'rgba(15,23,42,0.7)', borderTop: '1px solid rgba(51,65,85,0.4)', display: 'flex', gap: '12px' },
   inputMessage: { flex: 1, padding: '12px 16px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(51,65,85,0.6)', borderRadius: '12px', color: '#e2e8f0', fontSize: '13.5px', outline: 'none' },
   btnSend: { width: '46px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px' },
-  colForm: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)', display: 'flex', flexDirection: 'column', minHeight: 0 },
   formHeader: { padding: '18px 20px', borderBottom: '1px solid rgba(51,65,85,0.4)' },
   formIcon: { fontSize: '16px' },
   formTitle: { fontSize: '11.5px', color: '#f1f5f9', letterSpacing: '0.8px' },
