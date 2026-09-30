@@ -46,7 +46,7 @@ export default function CRM() {
   const [formData, setFormData] = useState({});
   const [hoveredId, setHoveredId] = useState(null);
 
-  // Vista activa en móvil: 'inbox' | 'chat' | 'form'
+  // Vista activa en móvil: 'inbox' | 'chat'
   const [mobileView, setMobileView] = useState('inbox');
   const [mobileFormOpen, setMobileFormOpen] = useState(false);
 
@@ -243,7 +243,7 @@ export default function CRM() {
       className="col-inbox"
       style={{
         ...styles.colInboxBg,
-        // En móvil ocupa todo el ancho
+        height: '100%',
         width: isMobile ? '100%' : undefined,
         display: isMobile && mobileView !== 'inbox' ? 'none' : 'flex',
       }}
@@ -314,17 +314,18 @@ export default function CRM() {
                   {conv.assignedTo && <span style={styles.assignedBadge}>👤 {getVendedorName(conv.assignedTo)}</span>}
                 </div>
               </div>
-              {isHovered && !isMobile && (
+              {isMobile ? (
                 <div style={styles.convActions}>
                   <button onClick={(e) => handleRename(conv, e)} style={styles.actionBtn}>✏️</button>
                   <button onClick={(e) => handleDelete(conv, e)} style={{ ...styles.actionBtn, ...styles.actionBtnDanger }}>🗑️</button>
                 </div>
-              )}
-              {isMobile && (
-                <div style={styles.convActions}>
-                  <button onClick={(e) => handleRename(conv, e)} style={styles.actionBtn}>✏️</button>
-                  <button onClick={(e) => handleDelete(conv, e)} style={{ ...styles.actionBtn, ...styles.actionBtnDanger }}>🗑️</button>
-                </div>
+              ) : (
+                isHovered && (
+                  <div style={styles.convActions}>
+                    <button onClick={(e) => handleRename(conv, e)} style={styles.actionBtn}>✏️</button>
+                    <button onClick={(e) => handleDelete(conv, e)} style={{ ...styles.actionBtn, ...styles.actionBtnDanger }}>🗑️</button>
+                  </div>
+                )
               )}
             </div>
           );
@@ -339,6 +340,7 @@ export default function CRM() {
       className="col-chat"
       style={{
         ...styles.colChatBg,
+        height: '100%',
         width: isMobile ? '100%' : undefined,
         display: isMobile && mobileView !== 'chat' ? 'none' : 'flex',
       }}
@@ -409,7 +411,7 @@ export default function CRM() {
                       : '1px solid rgba(51,65,85,0.6)',
                 }}
               >
-                <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.5 }}>{m.text}</p>
+                <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word' }}>{m.text}</p>
                 <span style={styles.bubbleTime}>{m.time}</span>
               </div>
             ))}
@@ -444,6 +446,7 @@ export default function CRM() {
       className="col-form"
       style={{
         ...styles.colFormBg,
+        height: '100%',
         width: isMobile ? '100%' : undefined,
         display: isMobile && !mobileFormOpen ? 'none' : 'flex',
         // En móvil la ficha es un panel a pantalla completa
@@ -590,6 +593,14 @@ export default function CRM() {
   return (
     <div style={styles.container}>
       <style jsx global>{`
+        html, body {
+          height: 100%;
+          overflow: hidden;
+          overscroll-behavior-y: none;
+        }
+        #__next {
+          height: 100%;
+        }
         /* Evita zoom en iOS al enfocar inputs */
         input, select, textarea {
           font-size: 16px !important;
@@ -601,9 +612,6 @@ export default function CRM() {
         }
         * {
           -webkit-tap-highlight-color: transparent;
-        }
-        body {
-          overscroll-behavior: none;
         }
       `}</style>
       <style jsx>{`
@@ -620,23 +628,34 @@ export default function CRM() {
           display: flex;
           flex-direction: column;
           min-height: 0;
+          height: 100%;
           border-right: 1px solid rgba(51,65,85,0.4);
         }
         .col-chat {
           display: flex;
           flex-direction: column;
           min-height: 0;
+          height: 100%;
           border-right: 1px solid rgba(51,65,85,0.4);
         }
         .col-form {
           display: flex;
           flex-direction: column;
           min-height: 0;
+          height: 100%;
         }
 
         @media (max-width: 900px) {
           .responsive-grid {
             display: block !important;
+            overflow: hidden !important;
+            height: 100% !important;
+            flex: 1 !important;
+            min-height: 0 !important;
+          }
+          .col-inbox,
+          .col-chat {
+            height: 100% !important;
             overflow: hidden !important;
           }
         }
@@ -732,6 +751,7 @@ const styles = {
     color: '#64748b',
   },
   container: {
+    height: '100vh',
     height: '100dvh',
     display: 'flex',
     flexDirection: 'column',
@@ -863,7 +883,7 @@ const styles = {
   colChatBg: { background: 'rgba(5,7,13,0.4)', flexDirection: 'column' },
   colFormBg: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)', flexDirection: 'column' },
 
-  inboxHeader: { padding: '14px', borderBottom: '1px solid rgba(51,65,85,0.3)' },
+  inboxHeader: { padding: '14px', borderBottom: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 },
   searchInput: {
     width: '100%',
     padding: '10px 14px',
@@ -874,7 +894,13 @@ const styles = {
     outline: 'none',
     boxSizing: 'border-box',
   },
-  list: { flex: 1, overflowY: 'auto', minHeight: 0 },
+  list: {
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    minHeight: 0,
+  },
   emptyState: { padding: '60px 20px', textAlign: 'center', fontSize: '13px', color: '#64748b' },
   convItem: {
     display: 'flex',
@@ -946,6 +972,7 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: '8px',
+    flexShrink: 0,
   },
   btnBack: {
     background: 'rgba(30,41,59,0.8)',
@@ -972,11 +999,14 @@ const styles = {
   messagesArea: {
     flex: 1,
     overflowY: 'auto',
-    padding: '24px',
+    overflowX: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    padding: '20px 16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
     minHeight: 0,
+    maxHeight: '100%',
   },
   emptyChat: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b' },
   bubble: { maxWidth: '78%', padding: '11px 15px', borderRadius: '16px' },
@@ -988,6 +1018,7 @@ const styles = {
     borderTop: '1px solid rgba(51,65,85,0.4)',
     display: 'flex',
     gap: '12px',
+    flexShrink: 0,
   },
   inputMessage: {
     flex: 1,
@@ -997,6 +1028,7 @@ const styles = {
     borderRadius: '12px',
     color: '#e2e8f0',
     outline: 'none',
+    minWidth: 0,
   },
   btnSend: {
     width: '46px',
@@ -1008,12 +1040,14 @@ const styles = {
     fontSize: '16px',
     flexShrink: 0,
   },
-  formHeader: { padding: '14px 20px', borderBottom: '1px solid rgba(51,65,85,0.4)' },
+  formHeader: { padding: '14px 20px', borderBottom: '1px solid rgba(51,65,85,0.4)', flexShrink: 0 },
   formIcon: { fontSize: '16px' },
   formTitle: { fontSize: '11.5px', color: '#f1f5f9', letterSpacing: '0.8px' },
   formScroll: {
     flex: 1,
     overflowY: 'auto',
+    overflowX: 'hidden',
+    WebkitOverflowScrolling: 'touch',
     padding: '18px 20px',
     paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
     display: 'flex',
