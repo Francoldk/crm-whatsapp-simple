@@ -135,9 +135,44 @@ export default function CRM() {
     }
   };
 
-  const handleSend = async (e) => {
+const handleSend = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv) return;
+
+    const text = inputReply.trim();
+    setInputReply('');
+    const targetPhone = selectedConv.phone || selectedConv.jid;
+    const targetJid = selectedConv.jid; // Extraemos el JID real de la base de datos
+    const now = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        String(c.id) === String(selectedConv.id)
+          ? {
+              ...c,
+              lastMessage: text,
+              messages: [...(c.messages || []), { id: Date.now(), sender: 'me', text, time: now }],
+            }
+          : c
+      )
+    );
+
+    try {
+      await fetch('/api/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // AHORA MANDAMOS EL JID OBLIGATORIAMENTE
+        body: JSON.stringify({ phone: targetPhone, jid: targetJid, message: text, contactId: selectedConv.id }),
+      });
+      await fetch('/api/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedConv.id, lastMessage: text }),
+      });
+    } catch (err) {
+      console.error('Error enviando:', err);
+    }
+  };
 
     const text = inputReply.trim();
     setInputReply('');
@@ -298,7 +333,7 @@ export default function CRM() {
                   </strong>
                   <span style={styles.convTime}>{conv.time}</span>
                 </div>
-                <div style={styles.convPhone}>+{conv.phone}</div>
+                <div style={styles.convPhone}>{conv.phone?.includes('+') ? conv.phone : `+${conv.phone}`}</div>
                 <p style={styles.convSnippet}>{conv.lastMessage || 'Sin mensajes'}</p>
                 <div style={{ marginTop: '5px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <span
@@ -359,7 +394,7 @@ export default function CRM() {
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={styles.chatTitle}>{selectedConv.name || selectedConv.phone}</h3>
-                <span style={styles.chatPhone}>+{selectedConv.phone}</span>
+                <span style={styles.chatPhone}>{selectedConv.phone?.includes('+') ? selectedConv.phone : `+${selectedConv.phone}`}</span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
