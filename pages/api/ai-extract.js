@@ -42,7 +42,7 @@ Acá tenés la cotización estimada para tu [Producto] (Peso: [Peso]kg | FOB: US
 💰 TOTAL MARÍTIMO: USD [Suma total Marítimo]
 
 Incluye flete, honorarios, aduana y firma importadora hasta Sarandí (no incluye valor mercadería).
-⚠️ Los kg se toman volumétricos, a confirmar después.
+⚠️️ Los kg se toman volumétricos, a confirmar después.
 ¿Qué opción te cierra más para que avancemos? 🙌
 
 ━━━ 5. REGLAS PARA EL JSON (CRM Y MEMORIA) ━━━
@@ -72,3 +72,64 @@ Respondé ÚNICAMENTE con este JSON sin texto extra:
   },
   "replyMessage": "Mensaje para el cliente"
 }`;
+
+// ============================================================
+// MOTOR DE CONEXIÓN CON OPENROUTER / QWEN
+// ============================================================
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Método no permitido' });
+  }
+
+  try {
+    const { conversationHistory } = req.body;
+
+    if (!conversationHistory || !Array.isArray(conversationHistory)) {
+      return res.status(400).json({ error: 'Historial de conversación inválido' });
+    }
+
+    // Traducir el historial del CRM al formato que entiende la IA
+    const messages = [
+      { role: "system", content: SOL_SYSTEM_PROMPT },
+      ...conversationHistory.map(msg => ({
+        role: msg.sender === 'me' ? 'assistant' : 'user',
+        content: msg.text
+      }))
+    ];
+
+    // Conexión a OpenRouter
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        // Usa la key de OpenRouter. Si la guardaste en GROQ_API_KEY, ataja las dos.
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen-2.5-72b-instruct", // Modelo estable de Qwen en OpenRouter
+        messages: messages,
+        temperature: 0.3,
+        // Obligamos a la IA a que la respuesta sea un formato JSON válido
+        response_format: { type: "json_object" } 
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Falla en OpenRouter (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const aiResponseText = data.choices[0].message.content;
+
+    // Limpieza de seguridad por si la IA devuelve el JSON envuelto en comillas raras
+    const cleanJsonString = aiResponseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(cleanJsonString);
+
+    return res.status(200).json(parsedData);
+
+  } catch (error) {
+    console.error("Error crítico en ai-extract:", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
