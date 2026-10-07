@@ -17,7 +17,6 @@ const STATUS_COLORS = {
   'Cliente Finalizado': { bg: 'rgba(34,197,94,0.12)', color: '#4ade80', border: 'rgba(34,197,94,0.4)' },
 };
 
-// Hook: detecta si es pantalla "mobile"
 function useIsMobile(breakpoint = 900) {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -46,7 +45,6 @@ export default function CRM() {
   const [formData, setFormData] = useState({});
   const [hoveredId, setHoveredId] = useState(null);
 
-  // Vista activa en móvil: 'inbox' | 'chat'
   const [mobileView, setMobileView] = useState('inbox');
   const [mobileFormOpen, setMobileFormOpen] = useState(false);
 
@@ -135,7 +133,8 @@ export default function CRM() {
     }
   };
 
-const handleSend = async (e) => {
+  // --- FUNCIÓN REPARADA Y FORMATEADA CORRECTAMENTE ---
+  const handleSend = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv) return;
 
@@ -161,41 +160,7 @@ const handleSend = async (e) => {
       await fetch('/api/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // AHORA MANDAMOS EL JID OBLIGATORIAMENTE
         body: JSON.stringify({ phone: targetPhone, jid: targetJid, message: text, contactId: selectedConv.id }),
-      });
-      await fetch('/api/conversations', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: selectedConv.id, lastMessage: text }),
-      });
-    } catch (err) {
-      console.error('Error enviando:', err);
-    }
-  };
-
-    const text = inputReply.trim();
-    setInputReply('');
-    const targetPhone = selectedConv.phone || selectedConv.jid;
-    const now = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        String(c.id) === String(selectedConv.id)
-          ? {
-              ...c,
-              lastMessage: text,
-              messages: [...(c.messages || []), { id: Date.now(), sender: 'me', text, time: now }],
-            }
-          : c
-      )
-    );
-
-    try {
-      await fetch('/api/send-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: targetPhone, message: text, contactId: selectedConv.id }),
       });
       await fetch('/api/conversations', {
         method: 'PATCH',
@@ -272,7 +237,6 @@ const handleSend = async (e) => {
     return <div style={styles.loadingScreen}>Cargando...</div>;
   }
 
-  // ============ RENDER: Inbox ============
   const renderInbox = () => (
     <aside
       className="col-inbox"
@@ -369,7 +333,6 @@ const handleSend = async (e) => {
     </aside>
   );
 
-  // ============ RENDER: Chat ============
   const renderChat = () => (
     <section
       className="col-chat"
@@ -475,7 +438,6 @@ const handleSend = async (e) => {
     </section>
   );
 
-  // ============ RENDER: Ficha ============
   const renderForm = () => (
     <aside
       className="col-form"
@@ -484,7 +446,6 @@ const handleSend = async (e) => {
         height: '100%',
         width: isMobile ? '100%' : undefined,
         display: isMobile && !mobileFormOpen ? 'none' : 'flex',
-        // En móvil la ficha es un panel a pantalla completa
         position: isMobile ? 'fixed' : 'relative',
         top: isMobile ? 0 : undefined,
         left: isMobile ? 0 : undefined,
@@ -636,7 +597,6 @@ const handleSend = async (e) => {
         #__next {
           height: 100%;
         }
-        /* Evita zoom en iOS al enfocar inputs */
         input, select, textarea {
           font-size: 16px !important;
         }
