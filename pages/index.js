@@ -105,6 +105,36 @@ export default function CRM() {
     if (isMobile) setMobileView('chat');
   };
 
+  // --- DISYUNTOR GLOBAL ---
+  const isGlobalBotActive = conversations.some((c) => c.botActive !== false);
+
+  const handleGlobalKillSwitch = async () => {
+    const turnOff = isGlobalBotActive;
+    const msg = turnOff
+      ? "🛑 DISYUNTOR GENERAL: Esto va a APAGAR la IA para TODOS los clientes al mismo tiempo. ¿Estás seguro?"
+      : "▶️ REACTIVAR IA: Esto va a volver a encender la IA para todos. ¿Avanzamos?";
+
+    if (!window.confirm(msg)) return;
+
+    // Actualizamos la UI al instante
+    setConversations((prev) => prev.map((c) => ({ ...c, botActive: !turnOff })));
+
+    // Mandamos la orden masiva a la base de datos
+    try {
+      const updates = conversations.map((c) =>
+        fetch('/api/conversations', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: c.id, botActive: !turnOff }),
+        })
+      );
+      await Promise.all(updates);
+    } catch (error) {
+      console.error("Error en disyuntor global:", error);
+      alert("Hubo un error al aplicar el disyuntor global.");
+    }
+  };
+
   const handleTriggerSolAI = async () => {
     if (!selectedConv?.messages || selectedConv.messages.length === 0) return;
     setLoadingAi(true);
@@ -363,18 +393,17 @@ export default function CRM() {
               {!isMobile && (
                 <button onClick={(e) => handleRename(selectedConv, e)} style={styles.btnRename}>✏️</button>
               )}
+              {/* Botón individual (apaga solo este chat por si querés intervenir manualmente) */}
               <button
                 onClick={() => updateContact({ botActive: !(selectedConv.botActive !== false) })}
                 style={{
                   ...styles.btnToggleBot,
-                  background: selectedConv.botActive !== false ? '#ef4444' : '#10b981',
-                  borderColor: selectedConv.botActive !== false ? '#b91c1c' : '#059669',
-                  color: '#ffffff',
-                  padding: '8px 16px',
-                  boxShadow: selectedConv.botActive !== false ? '0 0 10px rgba(239, 68, 68, 0.5)' : 'none',
+                  background: selectedConv.botActive !== false ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                  borderColor: selectedConv.botActive !== false ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)',
+                  color: selectedConv.botActive !== false ? '#4ade80' : '#f87171',
                 }}
               >
-                {selectedConv.botActive !== false ? (isMobile ? '🛑' : '🛑 FRENAR IA') : (isMobile ? '▶️' : '▶️ REACTIVAR IA')}
+                {selectedConv.botActive !== false ? (isMobile ? '🤖' : '🤖 IA Activa') : (isMobile ? '⏸️' : '⏸️ IA Pausada')}
               </button>
               {isMobile && (
                 <button onClick={() => setMobileFormOpen(true)} style={styles.btnRename} aria-label="Ficha">
@@ -586,6 +615,7 @@ export default function CRM() {
 
   return (
     <div style={styles.container}>
+      {/* CSS GLOBAL PARA FORZAR LA BARRA DE DESPLAZAMIENTO */}
       <style jsx global>{`
         html, body {
           height: 100%;
@@ -605,6 +635,22 @@ export default function CRM() {
         }
         * {
           -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Estilos explícitos para el Scrollbar */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: rgba(15, 23, 42, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(71, 85, 105, 0.8);
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(100, 116, 139, 1);
         }
       `}</style>
       <style jsx>{`
@@ -666,7 +712,7 @@ export default function CRM() {
             <h1 style={{ ...styles.title, fontSize: isMobile ? '13px' : '15px' }}>CRM DCAM</h1>
             {!isMobile && (
               <span style={styles.subtitle}>
-                {session.user.name || session.user.email} · {session.user.role}
+                {session?.user?.name || session?.user?.email} · {session?.user?.role}
               </span>
             )}
           </div>
@@ -694,13 +740,26 @@ export default function CRM() {
         </nav>
 
         <div style={styles.headerRight}>
+          {/* EL BOTÓN GIGANTE DEL DISYUNTOR GLOBAL */}
+          <button
+            onClick={handleGlobalKillSwitch}
+            style={{
+              ...styles.btnDisyuntor,
+              background: isGlobalBotActive ? '#ef4444' : '#10b981',
+              boxShadow: isGlobalBotActive ? '0 0 12px rgba(239, 68, 68, 0.6)' : 'none',
+              ...(isMobile ? styles.btnMobile : {})
+            }}
+          >
+            {isGlobalBotActive ? (isMobile ? '🛑' : '🛑 FRENAR IA (GLOBAL)') : (isMobile ? '▶️' : '▶️ REACTIVAR IA')}
+          </button>
+
           {!isMobile && (
             <div style={styles.statPill}>
               <span style={styles.statDot} />
               <span>{conversations.length} contactos</span>
             </div>
           )}
-          {session.user.role === 'admin' && (
+          {session?.user?.role === 'admin' && (
             <button onClick={() => router.push('/admin')} style={{ ...styles.btnAdmin, ...(isMobile ? styles.btnMobile : {}) }}>
               {isMobile ? '👥' : '👥 Usuarios'}
             </button>
@@ -868,6 +927,15 @@ const styles = {
     borderRadius: '8px',
     fontSize: '11.5px',
     fontWeight: 600,
+    cursor: 'pointer',
+  },
+  btnDisyuntor: {
+    color: '#ffffff',
+    border: 'none',
+    padding: '6px 14px',
+    borderRadius: '8px',
+    fontSize: '11.5px',
+    fontWeight: 800,
     cursor: 'pointer',
   },
   btnMobile: { padding: '8px 10px', fontSize: '16px' },
