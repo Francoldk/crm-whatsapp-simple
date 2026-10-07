@@ -103,7 +103,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen-2.5-32b", // El modelo estable de Qwen
+        model: "qwen/qwen3.8-27b", // El modelo estable de Qwen
         messages: messages,
         temperature: 0.3,
         response_format: { type: "json_object" } 
