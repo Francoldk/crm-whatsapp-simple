@@ -133,7 +133,6 @@ export default function CRM() {
     }
   };
 
-  // --- FUNCIÓN REPARADA Y FORMATEADA CORRECTAMENTE ---
   const handleSend = async (e) => {
     e.preventDefault();
     if (!inputReply.trim() || !selectedConv) return;
@@ -141,7 +140,7 @@ export default function CRM() {
     const text = inputReply.trim();
     setInputReply('');
     const targetPhone = selectedConv.phone || selectedConv.jid;
-    const targetJid = selectedConv.jid; // Extraemos el JID real de la base de datos
+    const targetJid = selectedConv.jid;
     const now = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     setConversations((prev) =>
@@ -368,15 +367,14 @@ export default function CRM() {
                 onClick={() => updateContact({ botActive: !(selectedConv.botActive !== false) })}
                 style={{
                   ...styles.btnToggleBot,
-                  background:
-                    selectedConv.botActive !== false
-                      ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(16,185,129,0.1))'
-                      : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.1))',
-                  borderColor: selectedConv.botActive !== false ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)',
-                  color: selectedConv.botActive !== false ? '#4ade80' : '#f87171',
+                  background: selectedConv.botActive !== false ? '#ef4444' : '#10b981',
+                  borderColor: selectedConv.botActive !== false ? '#b91c1c' : '#059669',
+                  color: '#ffffff',
+                  padding: '8px 16px',
+                  boxShadow: selectedConv.botActive !== false ? '0 0 10px rgba(239, 68, 68, 0.5)' : 'none',
                 }}
               >
-                {selectedConv.botActive !== false ? (isMobile ? '🤖' : '🤖 Sol activa') : isMobile ? '⏸️' : '⏸️ Sol pausada'}
+                {selectedConv.botActive !== false ? (isMobile ? '🛑' : '🛑 FRENAR IA') : (isMobile ? '▶️' : '▶️ REACTIVAR IA')}
               </button>
               {isMobile && (
                 <button onClick={() => setMobileFormOpen(true)} style={styles.btnRename} aria-label="Ficha">
@@ -409,7 +407,7 @@ export default function CRM() {
                       : '1px solid rgba(51,65,85,0.6)',
                 }}
               >
-                <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word' }}>{m.text}</p>
+                <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{m.text}</p>
                 <span style={styles.bubbleTime}>{m.time}</span>
               </div>
             ))}
@@ -1001,7 +999,6 @@ const styles = {
     flexDirection: 'column',
     gap: '12px',
     minHeight: 0,
-    maxHeight: '100%',
   },
   emptyChat: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b' },
   bubble: { maxWidth: '78%', padding: '11px 15px', borderRadius: '16px' },
