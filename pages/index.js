@@ -97,8 +97,11 @@ export default function CRM() {
   }, [selectedConv?.id]);
 
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConv?.messages?.length]);
+    // Timeout para asegurar que el DOM se haya actualizado antes de scrollear
+    setTimeout(() => {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }, [selectedConv?.messages?.length, selectedId]);
 
   const handleSelectConv = (id) => {
     setSelectedId(String(id));
@@ -271,8 +274,6 @@ export default function CRM() {
       className="col-inbox"
       style={{
         ...styles.colInboxBg,
-        height: '100%',
-        width: isMobile ? '100%' : undefined,
         display: isMobile && mobileView !== 'inbox' ? 'none' : 'flex',
       }}
     >
@@ -367,8 +368,6 @@ export default function CRM() {
       className="col-chat"
       style={{
         ...styles.colChatBg,
-        height: '100%',
-        width: isMobile ? '100%' : undefined,
         display: isMobile && mobileView !== 'chat' ? 'none' : 'flex',
       }}
     >
@@ -393,7 +392,6 @@ export default function CRM() {
               {!isMobile && (
                 <button onClick={(e) => handleRename(selectedConv, e)} style={styles.btnRename}>✏️</button>
               )}
-              {/* Botón individual (apaga solo este chat por si querés intervenir manualmente) */}
               <button
                 onClick={() => updateContact({ botActive: !(selectedConv.botActive !== false) })}
                 style={{
@@ -413,6 +411,7 @@ export default function CRM() {
             </div>
           </div>
 
+          {/* ÁREA DE MENSAJES CORREGIDA */}
           <div style={styles.messagesArea}>
             {(!selectedConv.messages || selectedConv.messages.length === 0) && (
               <div style={styles.emptyChat}>
@@ -440,7 +439,7 @@ export default function CRM() {
                 <span style={styles.bubbleTime}>{m.time}</span>
               </div>
             ))}
-            <div ref={chatBottomRef} />
+            <div ref={chatBottomRef} style={{ height: 1, flexShrink: 0 }} />
           </div>
 
           <form onSubmit={handleSend} style={styles.chatInputBar}>
@@ -470,8 +469,6 @@ export default function CRM() {
       className="col-form"
       style={{
         ...styles.colFormBg,
-        height: '100%',
-        width: isMobile ? '100%' : undefined,
         display: isMobile && !mobileFormOpen ? 'none' : 'flex',
         position: isMobile ? 'fixed' : 'relative',
         top: isMobile ? 0 : undefined,
@@ -615,7 +612,6 @@ export default function CRM() {
 
   return (
     <div style={styles.container}>
-      {/* CSS GLOBAL PARA FORZAR LA BARRA DE DESPLAZAMIENTO */}
       <style jsx global>{`
         html, body {
           height: 100%;
@@ -624,6 +620,8 @@ export default function CRM() {
         }
         #__next {
           height: 100%;
+          display: flex;
+          flex-direction: column;
         }
         input, select, textarea {
           font-size: 16px !important;
@@ -635,68 +633,6 @@ export default function CRM() {
         }
         * {
           -webkit-tap-highlight-color: transparent;
-        }
-        
-        /* Estilos explícitos para el Scrollbar */
-        ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: rgba(15, 23, 42, 0.4);
-        }
-        ::-webkit-scrollbar-thumb {
-          background: rgba(71, 85, 105, 0.8);
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: rgba(100, 116, 139, 1);
-        }
-      `}</style>
-      <style jsx>{`
-        .responsive-grid {
-          flex: 1;
-          display: grid;
-          grid-template-columns: 340px 1fr 400px;
-          min-height: 0;
-          overflow: hidden;
-          z-index: 1;
-          position: relative;
-        }
-        .col-inbox {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          height: 100%;
-          border-right: 1px solid rgba(51,65,85,0.4);
-        }
-        .col-chat {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          height: 100%;
-          border-right: 1px solid rgba(51,65,85,0.4);
-        }
-        .col-form {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          height: 100%;
-        }
-
-        @media (max-width: 900px) {
-          .responsive-grid {
-            display: block !important;
-            overflow: hidden !important;
-            height: 100% !important;
-            flex: 1 !important;
-            min-height: 0 !important;
-          }
-          .col-inbox,
-          .col-chat {
-            height: 100% !important;
-            overflow: hidden !important;
-          }
         }
       `}</style>
 
@@ -740,7 +676,6 @@ export default function CRM() {
         </nav>
 
         <div style={styles.headerRight}>
-          {/* EL BOTÓN GIGANTE DEL DISYUNTOR GLOBAL */}
           <button
             onClick={handleGlobalKillSwitch}
             style={{
@@ -771,7 +706,7 @@ export default function CRM() {
       </header>
 
       {activeTab === 'chat' && (
-        <main className="responsive-grid">
+        <main style={styles.responsiveGrid}>
           {renderInbox()}
           {renderChat()}
           {renderForm()}
@@ -795,7 +730,7 @@ function Field({ label, children }) {
 
 const styles = {
   loadingScreen: {
-    minHeight: '100dvh',
+    height: '100vh',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -803,8 +738,7 @@ const styles = {
     color: '#64748b',
   },
   container: {
-    height: '100vh',
-    height: '100dvh',
+    height: '100%',
     display: 'flex',
     flexDirection: 'column',
     background: 'linear-gradient(180deg, #05070d 0%, #0a0f1c 100%)',
@@ -812,6 +746,15 @@ const styles = {
     overflow: 'hidden',
     position: 'relative',
   },
+responsiveGrid: {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'row',
+  minHeight: 0,
+  overflow: 'hidden',
+  zIndex: 1,
+  position: 'relative',
+},
   bgGlow1: {
     position: 'fixed',
     top: '-20%',
@@ -837,7 +780,7 @@ const styles = {
     zIndex: 0,
   },
   header: {
-    minHeight: '64px',
+    height: '64px',
     background: 'rgba(15,23,42,0.6)',
     backdropFilter: 'blur(20px)',
     borderBottom: '1px solid rgba(51,65,85,0.5)',
@@ -852,7 +795,8 @@ const styles = {
   headerMobile: {
     padding: '8px 10px',
     gap: '8px',
-    minHeight: 'auto',
+    height: 'auto',
+    minHeight: '60px',
     flexWrap: 'nowrap',
   },
   brand: { display: 'flex', alignItems: 'center' },
@@ -940,9 +884,28 @@ const styles = {
   },
   btnMobile: { padding: '8px 10px', fontSize: '16px' },
 
-  colInboxBg: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)', flexDirection: 'column' },
-  colChatBg: { background: 'rgba(5,7,13,0.4)', flexDirection: 'column' },
-  colFormBg: { background: 'rgba(10,15,28,0.6)', backdropFilter: 'blur(10px)', flexDirection: 'column' },
+  colInboxBg: { 
+    background: 'rgba(10,15,28,0.6)', 
+    backdropFilter: 'blur(10px)', 
+    flexDirection: 'column',
+    width: '340px',
+    borderRight: '1px solid rgba(51,65,85,0.4)'
+  },
+colChatBg: { 
+  background: 'rgba(5,7,13,0.4)', 
+  flexDirection: 'column',
+  flex: 1,
+  minWidth: 0,
+  minHeight: 0,
+  borderRight: '1px solid rgba(51,65,85,0.4)',
+  overflow: 'hidden'
+},
+  colFormBg: { 
+    background: 'rgba(10,15,28,0.6)', 
+    backdropFilter: 'blur(10px)', 
+    flexDirection: 'column',
+    width: '400px'
+  },
 
   inboxHeader: { padding: '14px', borderBottom: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 },
   searchInput: {
@@ -1034,6 +997,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     flexShrink: 0,
+    height: '65px'
   },
   btnBack: {
     background: 'rgba(30,41,59,0.8)',
@@ -1057,17 +1021,17 @@ const styles = {
     cursor: 'pointer',
   },
   btnToggleBot: { border: '1px solid', padding: '7px 14px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' },
-  messagesArea: {
-    flex: 1,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    WebkitOverflowScrolling: 'touch',
-    padding: '20px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    minHeight: 0,
-  },
+messagesArea: {
+  flex: '1 1 0',
+  minHeight: 0,
+  overflowY: 'scroll',
+  overflowX: 'hidden',
+  WebkitOverflowScrolling: 'touch',
+  padding: '20px 16px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '12px',
+},
   emptyChat: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b' },
   bubble: { maxWidth: '78%', padding: '11px 15px', borderRadius: '16px' },
   bubbleTime: { display: 'block', textAlign: 'right', fontSize: '9.5px', color: 'rgba(255,255,255,0.5)', marginTop: '5px' },
@@ -1079,6 +1043,7 @@ const styles = {
     display: 'flex',
     gap: '12px',
     flexShrink: 0,
+    height: '70px'
   },
   inputMessage: {
     flex: 1,
