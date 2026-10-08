@@ -1,3 +1,5 @@
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../lib/auth';
 // ============================================================
 // PROMPT DE SOL - Asesora Comercial de De China al Mundo
 // ============================================================
@@ -200,20 +202,84 @@ En All Inclusive, dutiesUSD y taxesUSD deben ser null; totalLogisticsUSD será 2
 Para otras modalidades, taxesUSD puede representar el 65% estimado del FOB, sin desdoblarlo artificialmente en impuestos y derechos.
 Nunca escribas explicaciones fuera del objeto JSON.`;
 
+// Control de datos determinista: no depende de que Qwen recuerde números.
+const validNumber = (x) => Number.isFinite(Number(x)) && Number(x) > 0;
+function getKnownFacts(history, saved = {}) {
+  const facts = { weightKg: validNumber(saved.weightKg) ? Number(saved.weightKg) : null,
+    goodsValue: validNumber(saved.goodsValue) ? Number(saved.goodsValue) : null,
+    cbm: validNumber(saved.cbm) ? Number(saved.cbm) : null,
+    product: saved.product || null, allInclusive: saved.shippingMode === 'all_inclusive' };
+  let awaiting = null;
+  for (const m of history) {
+    const t = String(m.text || '').trim();
+    if (!t) continue;
+    if (m.sender === 'me') {
+      if (/cu[aá]ntos?\s*(?:kilos?|kg)|peso(?:\s+total)?|pes[aá]|kilos?\s+o\s+volumen/i.test(t)) awaiting='weight';
+      else if (/valor\s*(?:fob|de la mercader[ií]a)|cu[aá]nto\s*(?:vale|cuesta)|d[oó]lares\s*\(?valor/i.test(t)) awaiting='fob';
+      else awaiting=null;
+      continue;
+    }
+    if (/all\s*inclusive|all\s*in\b/i.test(t)) facts.allInclusive = true;
+    const wt = t.match(/(\d+(?:[.,]\d+)?)\s*(?:kg\b|kilos?\b|kilogramos?\b)/i);
+    const fob = t.match(/(?:usd|u\$s|us\$|d[oó]lares?|fob)\s*[:$]?\s*(\d+(?:[.,]\d+)?)/i)
+      || t.match(/(?:\$\s*)(\d+(?:[.,]\d+)?)/);
+    const cbm = t.match(/(\d+(?:[.,]\d+)?)\s*(?:m[³3]\b|cbm\b|metros?\s*c[uú]bicos?)/i);
+    if (wt) facts.weightKg=Number(wt[1].replace(',','.'));
+    if (fob) facts.goodsValue=Number(fob[1].replace(',','.'));
+    if (cbm) facts.cbm=Number(cbm[1].replace(',','.'));
+    if (/^\d+(?:[.,]\d+)?\s*$/.test(t)) {
+      if (awaiting==='weight') facts.weightKg=Number(t.replace(',','.'));
+      if (awaiting==='fob') facts.goodsValue=Number(t.replace(',','.'));
+    }
+    awaiting=null;
+  }
+  return facts;
+}
+function allInclusiveGuard(history, facts) {
+  if (!facts.allInclusive) return null;
+  const lastClient = [...history].reverse().find(m=>m.sender!=='me');
+  if (!lastClient) return null;
+  const lastText=String(lastClient.text||'');
+  // No interferir cuando el cliente plantea otra duda concreta.
+  const isDataAnswer = /(?:\d+\s*(?:kg|kilos?|usd|d[oó]lares?|m3|m³)|^\s*\d+(?:[.,]\d+)?\s*$)/i.test(lastText);
+  if (!isDataAnswer) return null;
+  let reply;
+  if (facts.weightKg && facts.weightKg > 400 && !(facts.cbm && facts.cbm <= 2)) {
+    reply='Para All Inclusive manejamos un límite anunciado de hasta 400 kg o 2 m³. Con el peso indicado necesito que un asesor confirme la elegibilidad antes de ofrecerte el precio cerrado. ¿Tenés el volumen en m³?';
+  } else {
+    reply=`¡Perfecto! Ya tengo ${facts.weightKg ? facts.weightKg+' kg' : 'los datos que me pasaste'}${facts.goodsValue ? ' y el valor FOB de USD '+facts.goodsValue : ''}. La opción All Inclusive tiene un precio de USD 2.335, que incluye flete, aduana y honorarios hasta Sarandí, sujeto a verificar que la carga aplique (hasta 400 kg o 2 m³). ${facts.cbm ? 'Voy a verificar las condiciones de la mercadería.' : '¿Qué mercadería querés importar y qué volumen ocupa aproximadamente?'}`;
+  }
+  return { intent:'cotizacion', suggestedStatus:'Pre-Cierre', extractedData: {
+    clientName:null, product:facts.product, hscode:null, weightKg:facts.weightKg, cbm:facts.cbm,
+    goodsValue:facts.goodsValue, shippingMode:'all_inclusive', freightUSD:null,
+    insuranceUSD:null, dutiesUSD:null, taxesUSD:null, totalLogisticsUSD:null
+  }, replyMessage:reply };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
   try {
-    const { conversationHistory } = req.body;
+    const trustedBot = Boolean(process.env.CRM_WEBHOOK_SECRET) && req.headers['x-crm-secret'] === process.env.CRM_WEBHOOK_SECRET;
+    if (!trustedBot) {
+      const session = await getServerSession(req, res, authOptions);
+      if (!session) return res.status(401).json({ error: 'No autorizado' });
+    }
+    const { conversationHistory, quoteData = {} } = req.body;
 
     if (!conversationHistory || !Array.isArray(conversationHistory)) {
       return res.status(400).json({ error: 'Historial de conversación inválido' });
     }
 
+    const facts = getKnownFacts(conversationHistory, quoteData);
+    const guard = allInclusiveGuard(conversationHistory, facts);
+    if (guard) return res.status(200).json(guard);
+
     const messages = [
       { role: "system", content: SOL_SYSTEM_PROMPT },
+      { role: "system", content: `DATOS CONFIRMADOS DEL CRM (no inventes ni vuelvas a solicitarlos): ${JSON.stringify({ ...(quoteData || {}), weightKg: facts.weightKg, goodsValue: facts.goodsValue, cbm: facts.cbm, shippingMode: facts.allInclusive ? "all_inclusive" : quoteData.shippingMode })}` },
       ...conversationHistory.map(msg => ({
         role: msg.sender === 'me' ? 'assistant' : 'user',
         content: msg.text
@@ -245,6 +311,21 @@ export default async function handler(req, res) {
     const cleanJsonString = aiResponseText.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsedData = JSON.parse(cleanJsonString);
 
+    // Nunca permitir que el modelo borre hechos confirmados.
+    parsedData.extractedData = { ...(parsedData.extractedData || {}) };
+    for (const key of ['weightKg', 'goodsValue', 'cbm']) {
+      if (facts[key] != null) parsedData.extractedData[key] = facts[key];
+    }
+    if (facts.allInclusive) {
+      parsedData.extractedData.shippingMode = 'all_inclusive';
+      parsedData.extractedData.dutiesUSD = null;
+      parsedData.extractedData.taxesUSD = null;
+      const reply = String(parsedData.replyMessage || '');
+      if (/cu[aá]ntos?\s*(?:kilos?|kg)|qu[eé]\s*peso|cu[aá]nto\s*(?:vale|cuesta)|valor\s*(?:fob|de\s+la\s+mercader[ií]a)/i.test(reply)) {
+        const fixed = allInclusiveGuard([...conversationHistory, {sender:'client',text:`${facts.weightKg || ''} kg ${facts.goodsValue ? 'USD '+facts.goodsValue : ''}`}],facts);
+        if (fixed) parsedData.replyMessage = fixed.replyMessage;
+      }
+    }
     return res.status(200).json(parsedData);
 
   } catch (error) {
