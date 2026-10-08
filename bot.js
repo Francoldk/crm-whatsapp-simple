@@ -6,9 +6,47 @@ const PDFParser = require('pdf2json');
 
 const CRM_WEBHOOK_URL = 'https://crm-dcam-produccion.vercel.app/api/whatsapp-webhook';
 const AI_EXTRACT_URL = 'https://crm-dcam-produccion.vercel.app/api/ai-extract';
-const GROQ_API_KEY = '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';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 let sockInstance = null;
+
+// Recordamos envíos del CRM y de Sol para no guardarlos dos veces
+// cuando Baileys emite el evento saliente desde nuestra misma conexión.
+const sentByServer = new Map();
+const processedOwnIds = new Map();
+const OUTGOING_TTL = 120000;
+function outgoingKey(jid, text) {
+  return `${String(jid || '').replace(/\D/g, '')}|${String(text || '').trim()}`;
+}
+function markServerOutgoing(jid, text) {
+  const key = outgoingKey(jid, text);
+  sentByServer.set(key, Date.now() + OUTGOING_TTL);
+  return key;
+}
+function wasServerOutgoing(jid, text) {
+  const key = outgoingKey(jid, text);
+  const expire = sentByServer.get(key);
+  if (!expire) return false;
+  if (expire < Date.now()) { sentByServer.delete(key); return false; }
+  sentByServer.delete(key);
+  return true;
+}
+function alreadyProcessed(id) {
+  if (!id) return false;
+  const now = Date.now();
+  for (const [key, expires] of processedOwnIds) if (expires <= now) processedOwnIds.delete(key);
+  if (processedOwnIds.has(id)) return true;
+  processedOwnIds.set(id, now + 600000);
+  return false;
+}
+async function storeOwnMessage(phone, name, text) {
+  const response = await fetch(CRM_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({phone, name, text, sender:'me'})
+  });
+  if (!response.ok) throw new Error(`Webhook CRM rechazó mensaje propio: ${response.status}`);
+}
 
 // Extractor con limpieza de caracteres rotos de pdf2json
 function extractTextFromPdfBuffer(buffer) {
@@ -116,7 +154,7 @@ async function connectToWhatsApp() {
   sock.ev.on('messages.upsert', async (m) => {
     try {
       const msg = m.messages[0];
-      if (!msg || msg.key.fromMe) return;
+      if (!msg) return;
 
       const remoteJid = msg.key.remoteJid;
       if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid.includes('status')) return;
@@ -131,6 +169,18 @@ async function connectToWhatsApp() {
         msg.message?.imageMessage?.caption ||
         msg.message?.documentMessage?.caption ||
         '';
+
+      // Los mensajes escritos desde el celular también son fromMe.
+      // Los guardamos como propios, pero JAMÁS consultamos a Sol por ellos.
+      if (msg.key.fromMe) {
+        const ownText = String(text || '').trim();
+        if (!ownText) return; // En esta versión sincronizamos mensajes de texto.
+        if (wasServerOutgoing(remoteJid, ownText)) return;
+        if (alreadyProcessed(msg.key.id)) return;
+        await storeOwnMessage(cleanPhone, clientName, ownText);
+        console.log(`📱 Mensaje manual sincronizado al CRM: ${cleanPhone}`);
+        return;
+      }
 
       let imageBase64 = null;
 
@@ -233,7 +283,9 @@ async function connectToWhatsApp() {
 
       if (aiData?.replyMessage) {
         // 2. Responder por WhatsApp
-        await sock.sendMessage(remoteJid, { text: aiData.replyMessage });
+        const aiKey = markServerOutgoing(remoteJid, aiData.replyMessage);
+        try { await sock.sendMessage(remoteJid, { text: aiData.replyMessage }); }
+        catch (sendError) { sentByServer.delete(aiKey); throw sendError; }
 
         // 3. Registrar respuesta y datos extraídos en el CRM
         await fetch(CRM_WEBHOOK_URL, {
@@ -262,7 +314,10 @@ app.post('/send', async (req, res) => {
   try {
     if (!sockInstance) return res.status(503).json({ error: 'WhatsApp no conectado' });
     const cleanPhone = phone.replace(/\D/g, '');
-    await sockInstance.sendMessage(`${cleanPhone}@s.whatsapp.net`, { text: message });
+    const target = `${cleanPhone}@s.whatsapp.net`;
+    const crmKey = markServerOutgoing(target, message);
+    try { await sockInstance.sendMessage(target, { text: message }); }
+    catch (sendError) { sentByServer.delete(crmKey); throw sendError; }
 
     await fetch(CRM_WEBHOOK_URL, {
       method: 'POST',
