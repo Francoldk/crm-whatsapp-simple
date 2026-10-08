@@ -235,23 +235,43 @@ function getKnownFacts(history, saved = {}) {
 }
 function allInclusiveGuard(history, facts) {
   if (!facts.allInclusive) return null;
-  const lastClient = [...history].reverse().find(m=>m.sender!=='me');
+  const clientMessages = history.filter(m => m.sender !== 'me');
+  const lastClient = clientMessages.at(-1);
   if (!lastClient) return null;
-  const lastText=String(lastClient.text||'');
-  // No interferir cuando el cliente plantea otra duda concreta.
-  const isDataAnswer = /(?:\d+\s*(?:kg|kilos?|usd|d[oó]lares?|m3|m³)|^\s*\d+(?:[.,]\d+)?\s*$)/i.test(lastText);
-  if (!isDataAnswer) return null;
+  const current = String(lastClient.text || '').trim();
+  const asksAllInclusive = /all\s*(?:inclusive|in\b)/i.test(current);
+  const asksPrice = /(?:cotiz|presupuest|cu[aá]nto\s+(?:sale|cuesta)|precio|total)/i.test(current);
+  const isData = /(?:\d+\s*(?:kg|kilos?|usd|d[oó]lares?|m3|m³)|^\s*\d+(?:[.,]\d+)?\s*$)/i.test(current);
+  // Never hijack a new, unrelated question after the quote.
+  if (!asksAllInclusive && !asksPrice && !isData) return null;
+
+  const previousSol = [...history].reverse().find(m => m.sender === 'me' && m.text);
+  const alreadyQuoted = history.some(m => m.sender === 'me' && /(?:2[.,]335|2335)/.test(String(m.text || '')));
+  const productKnown = Boolean(facts.product);
+  const overWeight = facts.weightKg != null && facts.weightKg > 400;
+  const withinLimit = (facts.weightKg != null && facts.weightKg <= 400) || (facts.cbm != null && facts.cbm <= 2);
   let reply;
-  if (facts.weightKg && facts.weightKg > 400 && !(facts.cbm && facts.cbm <= 2)) {
-    reply='Para All Inclusive manejamos un límite anunciado de hasta 400 kg o 2 m³. Con el peso indicado necesito que un asesor confirme la elegibilidad antes de ofrecerte el precio cerrado. ¿Tenés el volumen en m³?';
+
+  if (overWeight && !withinLimit) {
+    reply = 'La modalidad All Inclusive tiene un precio de referencia de USD 2.335 y un límite anunciado de hasta 400 kg o 2 m³. Con el peso que me indicás, necesitamos confirmar el volumen y la elegibilidad antes de ofrecer ese precio cerrado. ¿Cuántos m³ ocupa la carga?';
+  } else if (alreadyQuoted && isData && !asksPrice && !asksAllInclusive) {
+    reply = `Perfecto, ya tengo ${facts.weightKg ? facts.weightKg + ' kg' : 'el dato que me pasaste'}${facts.goodsValue ? ' y FOB USD ' + facts.goodsValue : ''}. Seguimos con la opción All Inclusive cotizada en USD 2.335, sujeta a validar la mercadería. ${productKnown ? '¿Querés que un asesor confirme si tu carga aplica?' : '¿Qué producto querés importar?'}`;
   } else {
-    reply=`¡Perfecto! Ya tengo ${facts.weightKg ? facts.weightKg+' kg' : 'los datos que me pasaste'}${facts.goodsValue ? ' y el valor FOB de USD '+facts.goodsValue : ''}. La opción All Inclusive tiene un precio de USD 2.335, que incluye flete, aduana y honorarios hasta Sarandí, sujeto a verificar que la carga aplique (hasta 400 kg o 2 m³). ${facts.cbm ? 'Voy a verificar las condiciones de la mercadería.' : '¿Qué mercadería querés importar y qué volumen ocupa aproximadamente?'}`;
+    reply = `📦 COTIZACIÓN ALL INCLUSIVE\n💰 Precio de referencia: USD 2.335\n✅ Incluye flete, aduana y honorarios hasta Sarandí.\n📏 Para cargas de hasta 400 kg o 2 m³, sujeto a verificar que la mercadería y sus condiciones sean elegibles.\n${facts.weightKg ? '⚖️ Peso informado: ' + facts.weightKg + ' kg.\n' : ''}${facts.goodsValue ? '📋 FOB informado: USD ' + facts.goodsValue + ' (no modifica esta tarifa fija).\n' : ''}${productKnown ? '¿Querés que un asesor valide si esta carga aplica?' : '¿Qué mercadería querés importar para confirmar si aplica?'}`;
   }
-  return { intent:'cotizacion', suggestedStatus:'Pre-Cierre', extractedData: {
-    clientName:null, product:facts.product, hscode:null, weightKg:facts.weightKg, cbm:facts.cbm,
-    goodsValue:facts.goodsValue, shippingMode:'all_inclusive', freightUSD:null,
-    insuranceUSD:null, dutiesUSD:null, taxesUSD:null, totalLogisticsUSD:null
-  }, replyMessage:reply };
+
+  return {
+    intent: 'cotizacion',
+    suggestedStatus: withinLimit && productKnown ? 'Cotizado' : 'Faltan Datos',
+    extractedData: {
+      clientName: null, product: facts.product, hscode: null,
+      weightKg: facts.weightKg, cbm: facts.cbm, goodsValue: facts.goodsValue,
+      shippingMode: 'all_inclusive', freightUSD: null, insuranceUSD: null,
+      dutiesUSD: null, taxesUSD: null,
+      totalLogisticsUSD: withinLimit && productKnown ? 2335 : null
+    },
+    replyMessage: reply
+  };
 }
 
 export default async function handler(req, res) {
