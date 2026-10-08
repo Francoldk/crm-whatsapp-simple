@@ -200,78 +200,71 @@ En All Inclusive, dutiesUSD y taxesUSD deben ser null; totalLogisticsUSD será 2
 Para otras modalidades, taxesUSD puede representar el 65% estimado del FOB, sin desdoblarlo artificialmente en impuestos y derechos.
 Nunca escribas explicaciones fuera del objeto JSON.`;
 
-// Control de datos determinista: no depende de que Qwen recuerde números.
-const validNumber = (x) => Number.isFinite(Number(x)) && Number(x) > 0;
-function getKnownFacts(history, saved = {}) {
-  const facts = { weightKg: validNumber(saved.weightKg) ? Number(saved.weightKg) : null,
-    goodsValue: validNumber(saved.goodsValue) ? Number(saved.goodsValue) : null,
-    cbm: validNumber(saved.cbm) ? Number(saved.cbm) : null,
-    product: saved.product || null, allInclusive: saved.shippingMode === 'all_inclusive' };
-  let awaiting = null;
+// Estado comercial determinista. Compatible con el bot original de Render.
+const num = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
+const money = v => Number(v).toLocaleString('es-AR', {maximumFractionDigits: 2});
+const allRx = /all\s*[- ]?inclusive|all\s*in\b/i;
+const airRx = /\b(?:a[eé]re[oa]|courier)\b/i;
+const seaRx = /\b(?:mar[ií]tim[oa]|lcl|importa en grupo)\b/i;
+const getValue = v => Number(String(v).replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
+
+function factsFromHistory(history, saved = {}) {
+  const facts = {weightKg:num(saved.weightKg),goodsValue:num(saved.goodsValue),cbm:num(saved.cbm),product:saved.product || null,shippingMode:saved.shippingMode || null};
+  let pending = null;
+  let explicit = facts.shippingMode;
   for (const m of history) {
     const t = String(m.text || '').trim();
     if (!t) continue;
     if (m.sender === 'me') {
-      if (/cu[aá]ntos?\s*(?:kilos?|kg)|peso(?:\s+total)?|pes[aá]|kilos?\s+o\s+volumen/i.test(t)) awaiting='weight';
-      else if (/valor\s*(?:fob|de la mercader[ií]a)|cu[aá]nto\s*(?:vale|cuesta)|d[oó]lares\s*\(?valor/i.test(t)) awaiting='fob';
-      else awaiting=null;
+      // Incluso si la solicitud original quedó fuera de los últimos seis mensajes,
+      // una cotización previa permite recuperar la modalidad elegida.
+      if (allRx.test(t) && /2[.,]?335|2335|cotizaci[oó]n|precio/i.test(t)) facts.shippingMode = 'all_inclusive';
+      if (/\b(?:cu[aá]ntos?\s*(?:kilos?|kg)|peso\s*(?:total)?|cu[aá]nto\s*pesa)\b/i.test(t)) pending = 'weightKg';
+      else if (/valor\s*(?:fob|de\s+la\s+mercader[ií]a)|cu[aá]nto\s*(?:vale|cuesta)/i.test(t)) pending = 'goodsValue';
+      else pending = null;
       continue;
     }
-    if (/all\s*inclusive|all\s*in\b/i.test(t)) facts.allInclusive = true;
-    const wt = t.match(/(\d+(?:[.,]\d+)?)\s*(?:kg\b|kilos?\b|kilogramos?\b)/i);
-    const fob = t.match(/(?:usd|u\$s|us\$|d[oó]lares?|fob)\s*[:$]?\s*(\d+(?:[.,]\d+)?)/i)
-      || t.match(/(?:\$\s*)(\d+(?:[.,]\d+)?)/);
-    const cbm = t.match(/(\d+(?:[.,]\d+)?)\s*(?:m[³3]\b|cbm\b|metros?\s*c[uú]bicos?)/i);
-    if (wt) facts.weightKg=Number(wt[1].replace(',','.'));
-    if (fob) facts.goodsValue=Number(fob[1].replace(',','.'));
-    if (cbm) facts.cbm=Number(cbm[1].replace(',','.'));
-    if (/^\d+(?:[.,]\d+)?\s*$/.test(t)) {
-      if (awaiting==='weight') facts.weightKg=Number(t.replace(',','.'));
-      if (awaiting==='fob') facts.goodsValue=Number(t.replace(',','.'));
+    // Se cambia de modalidad sólo ante un pedido expreso del CLIENTE.
+    if (allRx.test(t)) { explicit = 'all_inclusive'; facts.shippingMode = explicit; }
+    else if ((airRx.test(t) || seaRx.test(t)) && /(?:quiero|prefiero|eleg[ií]|cambiar|cotiz|opci[oó]n|solo|solamente)/i.test(t)) {
+      explicit = airRx.test(t) && !seaRx.test(t) ? 'aereo' : 'maritimo';
+      facts.shippingMode = explicit;
     }
-    awaiting=null;
+    const wt = t.match(/(\d[\d.,]*)\s*(?:kg\b|kilos?\b|kilogramos?\b)/i);
+    const fob = t.match(/(?:usd|u\$s|us\$|d[oó]lares?|fob)\s*[:$]?\s*(\d[\d.,]*)/i)
+      || t.match(/(\d[\d.,]*)\s*(?:usd\b|u\$s\b|us\$|d[oó]lares?\b)/i)
+      || t.match(/\$\s*(\d[\d.,]*)/);
+    const volume = t.match(/(\d[\d.,]*)\s*(?:m[³3]\b|cbm\b|metros?\s*c[uú]bicos?)/i);
+    if (wt && num(getValue(wt[1]))) facts.weightKg = getValue(wt[1]);
+    if (fob && num(getValue(fob[1]))) facts.goodsValue = getValue(fob[1]);
+    if (volume && num(getValue(volume[1]))) facts.cbm = getValue(volume[1]);
+    if (/^\s*\d[\d.,]*\s*$/.test(t) && pending) facts[pending] = num(getValue(t));
+    pending = null;
   }
   return facts;
 }
-function allInclusiveGuard(history, facts) {
-  if (!facts.allInclusive) return null;
-  const clientMessages = history.filter(m => m.sender !== 'me');
-  const lastClient = clientMessages.at(-1);
-  if (!lastClient) return null;
-  const current = String(lastClient.text || '').trim();
-  const asksAllInclusive = /all\s*(?:inclusive|in\b)/i.test(current);
-  const asksPrice = /(?:cotiz|presupuest|cu[aá]nto\s+(?:sale|cuesta)|precio|total)/i.test(current);
-  const isData = /(?:\d+\s*(?:kg|kilos?|usd|d[oó]lares?|m3|m³)|^\s*\d+(?:[.,]\d+)?\s*$)/i.test(current);
-  // Never hijack a new, unrelated question after the quote.
-  if (!asksAllInclusive && !asksPrice && !isData) return null;
 
-  const previousSol = [...history].reverse().find(m => m.sender === 'me' && m.text);
-  const alreadyQuoted = history.some(m => m.sender === 'me' && /(?:2[.,]335|2335)/.test(String(m.text || '')));
-  const productKnown = Boolean(facts.product);
-  const overWeight = facts.weightKg != null && facts.weightKg > 400;
-  const withinLimit = (facts.weightKg != null && facts.weightKg <= 400) || (facts.cbm != null && facts.cbm <= 2);
+function allInclusiveResponse(history, facts) {
+  if (facts.shippingMode !== 'all_inclusive') return null;
+  const clients = history.filter(m => m.sender !== 'me');
+  const last = String(clients.at(-1)?.text || '').trim();
+  if (!last) return null;
+  const previouslyQuoted = history.some(m => m.sender === 'me' && allRx.test(String(m.text || '')) && /2[.,]?335|2335/.test(String(m.text || '')));
+  const explicitlyAskingPrice = /(?:cotiz|presupuest|precio|cu[aá]nto\s*(?:sale|cuesta))/i.test(last);
+  const mentionsAll = allRx.test(last);
+  const hasData = /\d\s*(?:kg|kilos?|usd|d[oó]lares?|m[³3]|cbm)\b|^\s*\d[\d.,]*\s*$/i.test(last);
+  // Preguntas nuevas de otro tipo quedan para Qwen, pero con modalidad fijada.
+  if (!mentionsAll && !explicitlyAskingPrice && !hasData) return null;
+  const eligibleSize = (facts.weightKg != null && facts.weightKg <= 400) || (facts.cbm != null && facts.cbm <= 2);
   let reply;
-
-  if (overWeight && !withinLimit) {
-    reply = 'La modalidad All Inclusive tiene un precio de referencia de USD 2.335 y un límite anunciado de hasta 400 kg o 2 m³. Con el peso que me indicás, necesitamos confirmar el volumen y la elegibilidad antes de ofrecer ese precio cerrado. ¿Cuántos m³ ocupa la carga?';
-  } else if (alreadyQuoted && isData && !asksPrice && !asksAllInclusive) {
-    reply = `Perfecto, ya tengo ${facts.weightKg ? facts.weightKg + ' kg' : 'el dato que me pasaste'}${facts.goodsValue ? ' y FOB USD ' + facts.goodsValue : ''}. Seguimos con la opción All Inclusive cotizada en USD 2.335, sujeta a validar la mercadería. ${productKnown ? '¿Querés que un asesor confirme si tu carga aplica?' : '¿Qué producto querés importar?'}`;
+  if (facts.weightKg > 400 && !(facts.cbm != null && facts.cbm <= 2)) {
+    reply = 'La tarifa All Inclusive es de USD 2.335 para cargas elegibles de hasta 400 kg o 2 m³. Con ese peso necesitamos validar el volumen y la mercadería antes de confirmar si aplica. ¿Cuántos m³ ocupa?';
+  } else if (previouslyQuoted && hasData && !explicitlyAskingPrice && !mentionsAll) {
+    reply = `Perfecto, seguimos con All Inclusive (USD 2.335). ${facts.weightKg ? `Registré ${money(facts.weightKg)} kg. ` : ''}${facts.goodsValue ? `También el FOB de USD ${money(facts.goodsValue)}. ` : ''}${facts.product ? 'Para avanzar, un asesor debe confirmar que la carga sea elegible. ¿Querés que lo revisemos?' : '¿Qué mercadería querés importar para verificar que aplique?'}`;
   } else {
-    reply = `📦 COTIZACIÓN ALL INCLUSIVE\n💰 Precio de referencia: USD 2.335\n✅ Incluye flete, aduana y honorarios hasta Sarandí.\n📏 Para cargas de hasta 400 kg o 2 m³, sujeto a verificar que la mercadería y sus condiciones sean elegibles.\n${facts.weightKg ? '⚖️ Peso informado: ' + facts.weightKg + ' kg.\n' : ''}${facts.goodsValue ? '📋 FOB informado: USD ' + facts.goodsValue + ' (no modifica esta tarifa fija).\n' : ''}${productKnown ? '¿Querés que un asesor valide si esta carga aplica?' : '¿Qué mercadería querés importar para confirmar si aplica?'}`;
+    reply = `📦 COTIZACIÓN ALL INCLUSIVE\n💰 Precio de referencia: USD 2.335\n✅ Incluye flete, aduana y honorarios hasta Sarandí.\n📏 Hasta 400 kg o 2 m³, sujeto a elegibilidad de la mercadería.\n${facts.weightKg ? `⚖️ Peso informado: ${money(facts.weightKg)} kg.\n` : ''}${facts.product ? '¿Querés que un asesor verifique las condiciones de esta carga?' : '¿Qué mercadería querés importar para comprobar si aplica?'}`;
   }
-
-  return {
-    intent: 'cotizacion',
-    suggestedStatus: withinLimit && productKnown ? 'Cotizado' : 'Faltan Datos',
-    extractedData: {
-      clientName: null, product: facts.product, hscode: null,
-      weightKg: facts.weightKg, cbm: facts.cbm, goodsValue: facts.goodsValue,
-      shippingMode: 'all_inclusive', freightUSD: null, insuranceUSD: null,
-      dutiesUSD: null, taxesUSD: null,
-      totalLogisticsUSD: withinLimit && productKnown ? 2335 : null
-    },
-    replyMessage: reply
-  };
+  return {intent:'cotizacion', suggestedStatus: eligibleSize && facts.product ? 'Cotizado' : 'Faltan Datos', extractedData:{clientName:null,product:facts.product,hscode:null,weightKg:facts.weightKg,cbm:facts.cbm,goodsValue:facts.goodsValue,shippingMode:'all_inclusive',freightUSD:null,insuranceUSD:null,dutiesUSD:null,taxesUSD:null,totalLogisticsUSD: eligibleSize && facts.product ? 2335 : null},replyMessage:reply};
 }
 
 export default async function handler(req, res) {
@@ -286,13 +279,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Historial de conversación inválido' });
     }
 
-    const facts = getKnownFacts(conversationHistory, quoteData);
-    const guard = allInclusiveGuard(conversationHistory, facts);
+    const facts = factsFromHistory(conversationHistory, quoteData);
+    const guard = allInclusiveResponse(conversationHistory, facts);
     if (guard) return res.status(200).json(guard);
 
     const messages = [
       { role: "system", content: SOL_SYSTEM_PROMPT },
-      { role: "system", content: `DATOS CONFIRMADOS DEL CRM (no inventes ni vuelvas a solicitarlos): ${JSON.stringify({ ...(quoteData || {}), weightKg: facts.weightKg, goodsValue: facts.goodsValue, cbm: facts.cbm, shippingMode: facts.allInclusive ? "all_inclusive" : quoteData.shippingMode })}` },
+      { role: "system", content: `DATOS CONFIRMADOS DEL CRM (no inventes ni vuelvas a solicitarlos): ${JSON.stringify({ ...(quoteData || {}), weightKg: facts.weightKg, goodsValue: facts.goodsValue, cbm: facts.cbm, shippingMode: facts.shippingMode || quoteData.shippingMode })}` },
       ...conversationHistory.map(msg => ({
         role: msg.sender === 'me' ? 'assistant' : 'user',
         content: msg.text
@@ -329,14 +322,14 @@ export default async function handler(req, res) {
     for (const key of ['weightKg', 'goodsValue', 'cbm']) {
       if (facts[key] != null) parsedData.extractedData[key] = facts[key];
     }
-    if (facts.allInclusive) {
+    if (facts.shippingMode === 'all_inclusive') {
       parsedData.extractedData.shippingMode = 'all_inclusive';
       parsedData.extractedData.dutiesUSD = null;
       parsedData.extractedData.taxesUSD = null;
       const reply = String(parsedData.replyMessage || '');
-      if (/cu[aá]ntos?\s*(?:kilos?|kg)|qu[eé]\s*peso|cu[aá]nto\s*(?:vale|cuesta)|valor\s*(?:fob|de\s+la\s+mercader[ií]a)/i.test(reply)) {
-        const fixed = allInclusiveGuard([...conversationHistory, {sender:'client',text:`${facts.weightKg || ''} kg ${facts.goodsValue ? 'USD '+facts.goodsValue : ''}`}],facts);
-        if (fixed) parsedData.replyMessage = fixed.replyMessage;
+      // Última barrera: nunca cambiar a aéreo/marítimo por error del modelo.
+      if (/OPCI[OÓ]N\s*A[EÉ]REA|OPCI[OÓ]N\s*MAR[IÍ]TIMA|¿cu[aá]ntos?\s*(?:kilos?|kg)|valor\s*FOB/i.test(reply)) {
+        parsedData.replyMessage = `Seguimos con All Inclusive, cuyo precio de referencia es USD 2.335, sujeto a verificar la mercadería. ${facts.product ? '¿Querés que un asesor confirme la elegibilidad?' : '¿Qué producto querés importar?'}`;
       }
     }
     return res.status(200).json(parsedData);
