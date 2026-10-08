@@ -1,5 +1,3 @@
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../lib/auth';
 // ============================================================
 // PROMPT DE SOL - Asesora Comercial de De China al Mundo
 // ============================================================
@@ -262,11 +260,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const trustedBot = Boolean(process.env.CRM_WEBHOOK_SECRET) && req.headers['x-crm-secret'] === process.env.CRM_WEBHOOK_SECRET;
-    if (!trustedBot) {
-      const session = await getServerSession(req, res, authOptions);
-      if (!session) return res.status(401).json({ error: 'No autorizado' });
-    }
     const { conversationHistory, quoteData = {} } = req.body;
 
     if (!conversationHistory || !Array.isArray(conversationHistory)) {
