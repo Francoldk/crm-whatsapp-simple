@@ -37,6 +37,9 @@ export default async function handler(req, res) {
           id: m.id,
           sender: m.sender,
           text: m.text,
+          mediaId: m.media_path ? m.id : null,
+          mediaType: m.media_type || null,
+          mediaName: m.media_name || null,
           time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' }) : ''
         })).sort((a, b) => a.id - b.id)
       }));
