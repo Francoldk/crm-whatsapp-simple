@@ -49,6 +49,8 @@ export default function CRM() {
   const [mobileFormOpen, setMobileFormOpen] = useState(false);
 
   const chatBottomRef = useRef(null);
+  const attachmentInputRef = useRef(null);
+  const [sendingFile, setSendingFile] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -201,6 +203,43 @@ export default function CRM() {
       });
     } catch (err) {
       console.error('Error enviando:', err);
+    }
+  };
+
+  const sendAttachment = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedConv) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('El archivo supera 8 MB. Elegí uno más pequeño.');
+      return;
+    }
+    setSendingFile(true);
+    try {
+      const encoded = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+        reader.readAsDataURL(file);
+      });
+      const response = await fetch('/api/media-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId: selectedConv.id, phone: selectedConv.phone, jid: selectedConv.jid,
+          filename: file.name, mimeType: file.type || 'application/octet-stream',
+          data: encoded,
+          caption: inputReply.trim()
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'No se pudo enviar el archivo');
+      setInputReply('');
+      await fetchConversations();
+    } catch (error) {
+      alert(`Error adjuntando archivo: ${error.message}`);
+    } finally {
+      setSendingFile(false);
     }
   };
 
@@ -435,7 +474,23 @@ export default function CRM() {
                       : '1px solid rgba(51,65,85,0.6)',
                 }}
               >
-                <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{m.text}</p>
+                {m.mediaType === 'audio' && m.mediaId && (
+                  <audio controls preload="none" style={{ width: 'min(280px, 68vw)', maxWidth: '100%' }}
+                    src={`/api/media-file?id=${encodeURIComponent(m.id)}`} />
+                )}
+                {m.mediaType === 'image' && m.mediaId && (
+                  <a href={`/api/media-file?id=${encodeURIComponent(m.id)}`} target="_blank" rel="noreferrer">
+                    <img src={`/api/media-file?id=${encodeURIComponent(m.id)}`} alt={m.mediaName || 'Imagen adjunta'}
+                      style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 9, display: 'block', marginBottom: 6 }} />
+                  </a>
+                )}
+                {m.text && <p style={{ margin: '5px 0', fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{m.text}</p>}
+                {m.mediaId && (
+                  <a href={`/api/media-file?id=${encodeURIComponent(m.id)}&download=1`}
+                    style={{ display: 'inline-flex', gap: 7, color: '#bfdbfe', fontSize: 12, marginTop: 6, alignItems: 'center', overflowWrap: 'anywhere' }}>
+                    ⬇ {m.mediaName || (m.mediaType === 'audio' ? 'Descargar audio' : 'Descargar archivo')}
+                  </a>
+                )}
                 <span style={styles.bubbleTime}>{m.time}</span>
               </div>
             ))}
@@ -443,6 +498,14 @@ export default function CRM() {
           </div>
 
           <form onSubmit={handleSend} style={styles.chatInputBar}>
+            <input ref={attachmentInputRef} type="file" hidden
+              accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+              onChange={sendAttachment} />
+            <button type="button" title="Adjuntar imagen, audio o documento"
+              onClick={() => attachmentInputRef.current?.click()}
+              disabled={sendingFile} style={{ ...styles.btnSend, width: 39, background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)' }}>
+              {sendingFile ? '…' : '📎'}
+            </button>
             <input
               type="text"
               placeholder="Escribí un mensaje..."
