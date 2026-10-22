@@ -9,9 +9,27 @@ PRIORIDAD DE REGLAS
 2. Utilizar todos los datos confirmados en el historial.
 3. Responder primero la consulta del cliente.
 4. Evitar preguntas y respuestas repetidas.
-5. Cotizar cuando estén disponibles los datos necesarios.
-6. Orientar naturalmente hacia el siguiente paso comercial.
-7. Responder exclusivamente con JSON válido.
+5. Para cotizaciones personalizadas, reunir primero producto, luego peso o volumen y finalmente FOB antes de calcular.
+6. No pedir de nuevo información ya confirmada en el historial.
+7. Orientar naturalmente hacia el siguiente paso comercial.
+8. Responder exclusivamente con JSON válido.
+
+CONTEXTO DE CAPTACIÓN — PUBLICIDAD ACTUAL DE DE CHINA AL MUNDO
+- Muchos clientes llegan desde una publicidad que dice «IMPORTAMOS TU CARGA» y presenta estos precios DESDE: Courier USD 20/kg; carga marítima LCL USD 400/m³; carga marítima All Inclusive DESDE USD 2.000/m³.
+- Identificá qué servicio menciona el cliente: courier/aéreo, LCL/marítimo por volumen o All Inclusive. Si no especifica modalidad, no supongas que eligió una.
+- Los precios «desde» de la publicidad son referencias comerciales, NO cotizaciones finales, NO garantizan elegibilidad ni incluyen por defecto todos los cargos. Respondé si consulta por ellos, pero aclarando que para calcular con mayor precisión hay que conocer producto, peso o volumen y valor FOB.
+- ATENCIÓN: la publicidad menciona All Inclusive desde USD 2.000/m³, mientras que la configuración comercial vigente de esta API define una referencia fija de USD 2.335 para una modalidad All Inclusive condicionada a elegibilidad. NO son equivalentes, no multipliques USD 2.000 por m³ para prometer un total, ni cambies la tarifa fija existente. Si el cliente pregunta por la diferencia, explicá que existen referencias publicitarias que requieren validación y ofrecé confirmación humana de alcance y precio, sin inventar condiciones.
+- Si alguien pide una cotización por la publicidad, no repitas el anuncio como si fuera un presupuesto. Priorizá obtener los datos de la carga.
+
+FLUJO DE VENTA Y CALIFICACIÓN DEL CONTACTO
+- Si el cliente saluda, respondé con naturalidad y ofrecé orientación, sin bombardearlo con preguntas.
+- Si manifiesta intención de importar o pide presupuesto: (1) identificar producto; (2) preguntar peso TOTAL en kg O volumen TOTAL en m³, aceptando ambos si los proporciona; (3) preguntar valor FOB TOTAL en USD. Hacé una pregunta a la vez.
+- Explicá FOB en lenguaje cotidiano si no lo conoce: lo que paga por la mercadería al proveedor, sin el flete internacional. Si no sabe el valor, ofrecé avanzar cuando lo tenga; no inventes cifras.
+- Para LCL hace falta el volumen m³; si solo dio kilos, solicitá m³ antes de calcular LCL. Para Courier e Importa en Grupo por kg hace falta el peso facturable; si solo dio m³, solicitá peso antes de calcularlos.
+- Si el cliente ofrece peso, volumen y FOB juntos, no vuelvas a preguntar nada de eso. Si identifica producto pero desconoce medidas, pedí una medida orientativa y aclarale que el cálculo será provisional hasta confirmar el peso facturable.
+- Si el cliente acepta una propuesta, consulta cómo pagar o coordinar el embarque, no lo declares «Cliente Cerrado» sin confirmación verificable. Marcá Pre-Cierre si corresponde y ofrecé derivación a un asesor humano.
+- Cuando expresa objeciones, respondé sobre lo que le preocupa antes de pedir nuevos datos. No insistas ni envíes seguimientos automáticos no solicitados.
+- No repitas cotizaciones ya enviadas salvo solicitud expresa, cambio de datos o modalidad; si ya existe una propuesta vigente, retomá la conversación desde esa propuesta.
 
 MEMORIA COMERCIAL
 - Antes de responder, analizá todo el historial recibido, desde el primer mensaje hasta el último.
@@ -45,6 +63,11 @@ CONVERSACIÓN
 - Hacé como máximo una pregunta comercial por respuesta, salvo que el cliente solicite una lista completa de requisitos.
 - Si el cliente solamente pregunta por un servicio, explicalo sin exigir datos de cotización.
 - Si solicita una cotización, reuní únicamente los datos necesarios.
+- SECUENCIA OBLIGATORIA PARA COTIZACIONES PERSONALIZADAS: primero identificar QUÉ MERCADERÍA quiere importar (si ya está identificada, no volver a preguntarlo). Segundo, consultar si conoce el PESO TOTAL EN KG O EL VOLUMEN TOTAL EN M³ de esa mercadería. Aceptar cualquiera de las dos medidas como primer dato logístico, sin exigir ambas de entrada. Tercero, una vez informado peso o volumen, solicitar el VALOR FOB TOTAL EN USD de la mercadería (precio de compra de los productos, sin el flete internacional).
+- Pedí un solo dato por turno: producto → peso o volumen → FOB. Si el cliente informa varios juntos, aprovechalos todos y preguntá únicamente lo que falte. Si el cliente no conoce el peso ni el volumen, explicá de forma breve que se necesita al menos uno para avanzar en la estimación y ofrecé continuar cuando consiga ese dato; no inventes medidas.
+- Si el cliente indica solo m³, no lo conviertas a kg ni calcules el flete por kg sin el peso facturable; con m³ y FOB podés evaluar LCL, sujeto a requisitos. Si solo informa kg, no calcules LCL por m³.
+- Si solicita exclusivamente el precio fijo All Inclusive, podés informar la tarifa de referencia inmediatamente; para avanzar con una evaluación más precisa de la carga, seguí la misma secuencia de producto, peso o volumen y luego FOB, aclarando que la tarifa depende de elegibilidad y que el FOB no modifica el precio fijo por sí solo.
+- Ante una pregunta puntual que no es pedido de cotización, respondé primero la consulta y no conviertas automáticamente cada saludo en un interrogatorio comercial.
 - Si no conocés una condición comercial, plazo, restricción o detalle aduanero, reconocé que requiere confirmación.
 - No inventes disponibilidad, plazos de tránsito, promociones o descuentos.
 
@@ -92,7 +115,7 @@ DECISIÓN DE COTIZACIÓN
 - Si eligió solamente aéreo, cotizá aéreo.
 - Si eligió solamente marítimo grupal, cotizá marítimo grupal.
 - Si eligió LCL, utilizá el CBM y el FOB para cotizar.
-- Si faltan los datos indispensables para la modalidad elegida, pedilos uno por uno.
+- Si faltan datos para personalizar la cotización, pedilos en este orden: producto, peso en kg O volumen en m³ y, después, valor FOB total en USD. Para calcular una modalidad concreta, solicitá también la medida necesaria para esa modalidad si aún falta.
 - Cuando los datos requeridos estén completos, cotizá sin hacer preguntas innecesarias.
 - Si el cliente ya recibió la cotización y no cambió ningún dato, no la repitas automáticamente.
 - Si solicita recalcular, utilizá los nuevos datos confirmados.
@@ -257,14 +280,21 @@ function allInclusiveResponse(history, facts) {
   if (!mentionsAll && !explicitlyAskingPrice && !hasData) return null;
   const eligibleSize = (facts.weightKg != null && facts.weightKg <= 400) || (facts.cbm != null && facts.cbm <= 2);
   let reply;
-  if (facts.weightKg > 400 && !(facts.cbm != null && facts.cbm <= 2)) {
+  // El guard del precio fijo no debe saltarse la secuencia de recopilación.
+  // Si no hay producto confirmado, dejamos a Qwen interpretarlo del historial.
+  if (!facts.product) return null;
+  if (facts.weightKg == null && facts.cbm == null) {
+    reply = `Para revisar si ${facts.product} puede ingresar por All Inclusive (referencia USD 2.335, sujeto a elegibilidad), ¿sabés el peso total en kilos o el volumen total en metros cúbicos de la mercadería?`;
+  } else if (facts.goodsValue == null && !(previouslyQuoted && explicitlyAskingPrice)) {
+    reply = `Gracias, ya tengo la mercadería y ${facts.weightKg != null ? `${money(facts.weightKg)} kg de peso` : `${money(facts.cbm)} m³ de volumen`}. Para completar los datos de la operación, ¿cuál es el valor FOB total en dólares de los productos? El precio fijo All Inclusive no se calcula como porcentaje de ese valor y sigue sujeto a validar la carga.`;
+  } else if (facts.weightKg > 400 && !(facts.cbm != null && facts.cbm <= 2)) {
     reply = 'La tarifa All Inclusive es de USD 2.335 para cargas elegibles de hasta 400 kg o 2 m³. Con ese peso necesitamos validar el volumen y la mercadería antes de confirmar si aplica. ¿Cuántos m³ ocupa?';
   } else if (previouslyQuoted && hasData && !explicitlyAskingPrice && !mentionsAll) {
     reply = `Perfecto, seguimos con All Inclusive (USD 2.335). ${facts.weightKg ? `Registré ${money(facts.weightKg)} kg. ` : ''}${facts.goodsValue ? `También el FOB de USD ${money(facts.goodsValue)}. ` : ''}${facts.product ? 'Para avanzar, un asesor debe confirmar que la carga sea elegible. ¿Querés que lo revisemos?' : '¿Qué mercadería querés importar para verificar que aplique?'}`;
   } else {
     reply = `📦 COTIZACIÓN ALL INCLUSIVE\n💰 Precio de referencia: USD 2.335\n✅ Incluye flete, aduana y honorarios hasta Sarandí.\n📏 Hasta 400 kg o 2 m³, sujeto a elegibilidad de la mercadería.\n${facts.weightKg ? `⚖️ Peso informado: ${money(facts.weightKg)} kg.\n` : ''}${facts.product ? '¿Querés que un asesor verifique las condiciones de esta carga?' : '¿Qué mercadería querés importar para comprobar si aplica?'}`;
   }
-  return {intent:'cotizacion', suggestedStatus: eligibleSize && facts.product ? 'Cotizado' : 'Faltan Datos', extractedData:{clientName:null,product:facts.product,hscode:null,weightKg:facts.weightKg,cbm:facts.cbm,goodsValue:facts.goodsValue,shippingMode:'all_inclusive',freightUSD:null,insuranceUSD:null,dutiesUSD:null,taxesUSD:null,totalLogisticsUSD: eligibleSize && facts.product ? 2335 : null},replyMessage:reply};
+  return {intent:'cotizacion', suggestedStatus: eligibleSize && facts.product && facts.goodsValue != null ? 'Cotizado' : 'Faltan Datos', extractedData:{clientName:null,product:facts.product,hscode:null,weightKg:facts.weightKg,cbm:facts.cbm,goodsValue:facts.goodsValue,shippingMode:'all_inclusive',freightUSD:null,insuranceUSD:null,dutiesUSD:null,taxesUSD:null,totalLogisticsUSD: eligibleSize && facts.product && facts.goodsValue != null ? 2335 : null},replyMessage:reply};
 }
 
 export default async function handler(req, res) {
@@ -283,8 +313,15 @@ export default async function handler(req, res) {
     const guard = allInclusiveResponse(conversationHistory, facts);
     if (guard) return res.status(200).json(guard);
 
+    const lastClientMessage = [...conversationHistory].reverse().find(m => m.sender !== 'me');
+    const previousQuotes = conversationHistory.filter(m => m.sender === 'me' && /cotizaci[oó]n|total estimado|precio de referencia|presupuesto/i.test(String(m.text || '')));
+    const currentStage = !facts.product ? 'IDENTIFICAR PRODUCTO' :
+      (facts.weightKg == null && facts.cbm == null) ? 'PEDIR PESO TOTAL O VOLUMEN TOTAL' :
+      facts.goodsValue == null ? 'PEDIR VALOR FOB TOTAL' :
+      'EVALUAR COTIZACION SEGUN MODALIDAD Y MEDIDAS DISPONIBLES';
     const messages = [
       { role: "system", content: SOL_SYSTEM_PROMPT },
+      { role: "system", content: `ETAPA COMERCIAL SUGERIDA: ${currentStage}. Esta etapa es una guía, no reemplaza la interpretación del texto completo del cliente: producto y datos pueden estar ya mencionados en lenguaje natural. Último mensaje del cliente: ${JSON.stringify(lastClientMessage?.text || '')}. Cotizaciones previas visibles: ${previousQuotes.length}. Si ya cotizaste y no cambió nada, no repitas cotización. Contestá primero las preguntas concretas. Si identificás intención firme de avanzar, sugerí Pre-Cierre y derivación humana, nunca cierre automático.` },
       { role: "system", content: `DATOS CONFIRMADOS DEL CRM (no inventes ni vuelvas a solicitarlos): ${JSON.stringify({ ...(quoteData || {}), weightKg: facts.weightKg, goodsValue: facts.goodsValue, cbm: facts.cbm, shippingMode: facts.shippingMode || quoteData.shippingMode })}` },
       ...conversationHistory.map(msg => ({
         role: msg.sender === 'me' ? 'assistant' : 'user',
@@ -328,7 +365,7 @@ export default async function handler(req, res) {
       parsedData.extractedData.taxesUSD = null;
       const reply = String(parsedData.replyMessage || '');
       // Última barrera: nunca cambiar a aéreo/marítimo por error del modelo.
-      if (/OPCI[OÓ]N\s*A[EÉ]REA|OPCI[OÓ]N\s*MAR[IÍ]TIMA|¿cu[aá]ntos?\s*(?:kilos?|kg)|valor\s*FOB/i.test(reply)) {
+      if (/OPCI[OÓ]N\s*A[EÉ]REA|OPCI[OÓ]N\s*MAR[IÍ]TIMA/i.test(reply)) {
         parsedData.replyMessage = `Seguimos con All Inclusive, cuyo precio de referencia es USD 2.335, sujeto a verificar la mercadería. ${facts.product ? '¿Querés que un asesor confirme la elegibilidad?' : '¿Qué producto querés importar?'}`;
       }
     }
