@@ -231,40 +231,118 @@ const airRx = /\b(?:a[eé]re[oa]|courier)\b/i;
 const seaRx = /\b(?:mar[ií]tim[oa]|lcl|importa en grupo)\b/i;
 const getValue = v => Number(String(v).replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
 
+function productFromHistory(history, savedProduct) {
+  let product = String(savedProduct || '').trim() || null;
+  const known = [
+    [/\bauricul(?:ar|ares|ares?)\b|\baurocil\b/i, 'Auriculares'],
+    [/\bmartillos? neum[aá]ticos?\b/i, 'Martillos neumáticos'],
+    [/\bherramientas?\b/i, 'Herramientas'],
+    [/\bremeras?\b/i, 'Remeras'],
+    [/\bzapatillas?\b/i, 'Zapatillas'],
+    [/\brepuestos?\b/i, 'Repuestos'],
+    [/\bcelulares?\b/i, 'Celulares']
+  ];
+  for (const m of history) {
+    if (m.sender === 'me') continue;
+    const t = String(m.text || '').trim();
+    for (const [regex, value] of known) {
+      if (regex.test(t)) { product = value; break; }
+    }
+    const named = t.match(/(?:quiero|necesito|voy a|deseo|busco|importar|traer|cotizar)\s+(?:importar|traer|cotizar|unos?|unas?|el|la|los|las|de)?\s*([\p{L}][\p{L}\s-]{2,45})/iu);
+    if (!product && named && !/^(?:saber|consultar|una cotizaci[oó]n|un presupuesto|precio|informaci[oó]n|cu[aá]nto)/i.test(named[1])) {
+      product = named[1].replace(/[.!?].*$/, '').trim();
+    }
+  }
+  return product;
+}
+
 function factsFromHistory(history, saved = {}) {
-  const facts = {weightKg:num(saved.weightKg),goodsValue:num(saved.goodsValue),cbm:num(saved.cbm),product:saved.product || null,shippingMode:saved.shippingMode || null};
+  const facts = {weightKg:num(saved.weightKg),goodsValue:num(saved.goodsValue),cbm:num(saved.cbm),product:productFromHistory(history, saved.product),shippingMode:saved.shippingMode || null};
   let pending = null;
-  let explicit = facts.shippingMode;
   for (const m of history) {
     const t = String(m.text || '').trim();
     if (!t) continue;
     if (m.sender === 'me') {
-      // Incluso si la solicitud original quedó fuera de los últimos seis mensajes,
-      // una cotización previa permite recuperar la modalidad elegida.
       if (allRx.test(t) && /2[.,]?335|2335|cotizaci[oó]n|precio/i.test(t)) facts.shippingMode = 'all_inclusive';
-      if (/\b(?:cu[aá]ntos?\s*(?:kilos?|kg)|peso\s*(?:total)?|cu[aá]nto\s*pesa)\b/i.test(t)) pending = 'weightKg';
-      else if (/valor\s*(?:fob|de\s+la\s+mercader[ií]a)|cu[aá]nto\s*(?:vale|cuesta)/i.test(t)) pending = 'goodsValue';
-      else pending = null;
+      // Persistir la pregunta pendiente hasta que el cliente conteste.
+      if (/valor\s*(?:fob|total)?|(?:cu[aá]nto|qu[eé])\s*(?:pag[aá]s?|vale|cuesta)|compra\s+de\s+la\s+mercader/i.test(t) && /(?:usd|d[oó]lares|mercader|producto|proveedor|FOB|valor)/i.test(t)) pending = 'goodsValue';
+      else if (/metros?\s*c[uú]bicos?|\bm[³3]\b|\bcbm\b/i.test(t) && /(?:cu[aá]nt|volumen|ocup|sab[eé]s)/i.test(t)) pending = 'cbm';
+      else if (/peso|kilos?|\bkg\b/i.test(t) && /(?:cu[aá]nt|pes|sab[eé]s|aproximad)/i.test(t)) pending = 'weightKg';
       continue;
     }
-    // Se cambia de modalidad sólo ante un pedido expreso del CLIENTE.
-    if (allRx.test(t)) { explicit = 'all_inclusive'; facts.shippingMode = explicit; }
+    if (allRx.test(t)) facts.shippingMode = 'all_inclusive';
     else if ((airRx.test(t) || seaRx.test(t)) && /(?:quiero|prefiero|eleg[ií]|cambiar|cotiz|opci[oó]n|solo|solamente)/i.test(t)) {
-      explicit = airRx.test(t) && !seaRx.test(t) ? 'aereo' : 'maritimo';
-      facts.shippingMode = explicit;
+      facts.shippingMode = airRx.test(t) && !seaRx.test(t) ? 'aereo' : 'maritimo';
     }
     const wt = t.match(/(\d[\d.,]*)\s*(?:kg\b|kilos?\b|kilogramos?\b)/i);
     const fob = t.match(/(?:usd|u\$s|us\$|d[oó]lares?|fob)\s*[:$]?\s*(\d[\d.,]*)/i)
       || t.match(/(\d[\d.,]*)\s*(?:usd\b|u\$s\b|us\$|d[oó]lares?\b)/i)
       || t.match(/\$\s*(\d[\d.,]*)/);
-    const volume = t.match(/(\d[\d.,]*)\s*(?:m[³3]\b|cbm\b|metros?\s*c[uú]bicos?)/i);
+    const volume = t.match(/(\d[\d.,]*)\s*(?:m[³3](?!\w)|cbm\b|metros?\s*c[uú]bicos?)/i);
     if (wt && num(getValue(wt[1]))) facts.weightKg = getValue(wt[1]);
     if (fob && num(getValue(fob[1]))) facts.goodsValue = getValue(fob[1]);
     if (volume && num(getValue(volume[1]))) facts.cbm = getValue(volume[1]);
-    if (/^\s*\d[\d.,]*\s*$/.test(t) && pending) facts[pending] = num(getValue(t));
+    // Número aislado: interpretar en contexto. Si ya hay peso y falta FOB, es FOB,
+    // incluso si el asistente anterior hizo una pregunta ambigua.
+    if (/^\s*\d[\d.,]*\s*$/.test(t)) {
+      const value = num(getValue(t));
+      if (value && pending === 'goodsValue') facts.goodsValue = value;
+      else if (value && pending === 'weightKg') facts.weightKg = value;
+      else if (value && pending === 'cbm') facts.cbm = value;
+      else if (value && (facts.weightKg != null || facts.cbm != null) && facts.goodsValue == null) facts.goodsValue = value;
+    }
     pending = null;
   }
   return facts;
+}
+
+function lastClient(history) {
+  return [...history].reverse().find(m => m.sender !== 'me');
+}
+function requestedNewQuote(t) {
+  return /(?:cotiz|presupuest|recalcul|actualiz|precio|cu[aá]nto\s*(?:sale|cuesta)|otra\s+opci[oó]n)/i.test(t);
+}
+function quoteWasGiven(history) {
+  return history.some(m => m.sender === 'me' && /TOTAL ESTIMADO:|COTIZACI[OÓ]N ALL INCLUSIVE|PRECIO DE REFERENCIA: USD/i.test(String(m.text || '')));
+}
+function deterministicAnswer(history, facts) {
+  const last = String(lastClient(history)?.text || '').trim();
+  if (!last || !facts.product) return null;
+  const isData = /\d/.test(last) || /\bauricular|martillo|herramienta|remera|zapatilla|repuesto/i.test(last);
+  const isGreeting = /^(?:hola|buenas|buenos\s+d[ií]as|buenas\s+tardes)\W*$/i.test(last);
+  if (isGreeting) return null;
+  // En charla ya iniciada, cualquier producto o número conserva la etapa comercial.
+  if ((facts.weightKg == null && facts.cbm == null) && (isData || requestedNewQuote(last))) {
+    return `Perfecto, seguimos con ${facts.product}. ¿Sabés cuánto pesa en total la mercadería en kilos o cuántos metros cúbicos ocupa?`;
+  }
+  if (facts.goodsValue == null && (facts.weightKg != null || facts.cbm != null) && (isData || requestedNewQuote(last))) {
+    return `Perfecto, tengo ${facts.product}${facts.weightKg != null ? ` y ${money(facts.weightKg)} kg` : ` y ${money(facts.cbm)} m³`}. ¿Cuál es el valor FOB total de la mercadería en USD (lo que le pagás al proveedor)?`;
+  }
+  // Recalcular una estimación previa cuando el cliente cambia el peso o el FOB.
+  const previous = history.slice(0, -1);
+  const old = factsFromHistory(previous);
+  const revised = quoteWasGiven(previous) &&
+    ((old.weightKg != null && facts.weightKg !== old.weightKg) ||
+     (old.goodsValue != null && facts.goodsValue !== old.goodsValue) ||
+     (old.cbm != null && facts.cbm !== old.cbm));
+  if (revised && facts.weightKg != null && facts.goodsValue != null && facts.shippingMode !== 'all_inclusive') {
+    const shipping = facts.weightKg;
+    const fob = facts.goodsValue;
+    const insurance = fob * 0.03;
+    const taxes = fob * 0.65;
+    const air = shipping * 20 + 35 + insurance + taxes;
+    const sea = shipping * 5 + 35 + insurance + taxes;
+    if (facts.shippingMode === 'maritimo') {
+      return `Recalculé la estimación de ${facts.product} con ${money(shipping)} kg y FOB USD ${money(fob)}. 🚢 Importa en Grupo: flete USD ${money(shipping*5)}, honorarios USD 35, seguro USD ${money(insurance)}, impuestos estimados USD ${money(taxes)}. TOTAL ESTIMADO: USD ${money(sea)}. No incluye el valor de la mercadería; sujeto a peso facturable. ¿Querés avanzar con esta opción?`;
+    }
+    if (facts.shippingMode === 'aereo') {
+      return `Recalculé la estimación de ${facts.product} con ${money(shipping)} kg y FOB USD ${money(fob)}. ✈️ Courier: flete USD ${money(shipping*20)}, honorarios USD 35, seguro USD ${money(insurance)}, impuestos estimados USD ${money(taxes)}. TOTAL ESTIMADO: USD ${money(air)}. No incluye el valor de la mercadería; sujeto a peso facturable. ¿Querés avanzar con esta opción?`;
+    }
+    return `Recalculé ${facts.product} con ${money(shipping)} kg y FOB USD ${money(fob)}.\n✈️ Aéreo: flete USD ${money(shipping*20)}, honorarios USD 35, seguro USD ${money(insurance)}, impuestos estimados USD ${money(taxes)}. TOTAL ESTIMADO: USD ${money(air)}.\n🚢 Importa en Grupo: flete USD ${money(shipping*5)}, honorarios USD 35, seguro USD ${money(insurance)}, impuestos estimados USD ${money(taxes)}. TOTAL ESTIMADO: USD ${money(sea)}.\nNo incluye el valor de la mercadería; sujeto a peso facturable. ¿Qué opción te interesa?`;
+  }
+  // Un dato actualizado después de una cotización requiere recalcular, no saludar.
+  if (facts.goodsValue != null && (facts.weightKg != null || facts.cbm != null) && quoteWasGiven(history) && !requestedNewQuote(last) && !isData) return null;
+  return null;
 }
 
 function allInclusiveResponse(history, facts) {
@@ -310,6 +388,12 @@ export default async function handler(req, res) {
     }
 
     const facts = factsFromHistory(conversationHistory, quoteData);
+    const forced = deterministicAnswer(conversationHistory, facts);
+    if (forced) return res.status(200).json({
+      intent: 'cotizacion', suggestedStatus: 'Faltan Datos',
+      extractedData: {product: facts.product, weightKg: facts.weightKg, cbm: facts.cbm, goodsValue: facts.goodsValue, shippingMode: facts.shippingMode},
+      replyMessage: forced
+    });
     const guard = allInclusiveResponse(conversationHistory, facts);
     if (guard) return res.status(200).json(guard);
 
@@ -322,7 +406,8 @@ export default async function handler(req, res) {
     const messages = [
       { role: "system", content: SOL_SYSTEM_PROMPT },
       { role: "system", content: `ETAPA COMERCIAL SUGERIDA: ${currentStage}. Esta etapa es una guía, no reemplaza la interpretación del texto completo del cliente: producto y datos pueden estar ya mencionados en lenguaje natural. Último mensaje del cliente: ${JSON.stringify(lastClientMessage?.text || '')}. Cotizaciones previas visibles: ${previousQuotes.length}. Si ya cotizaste y no cambió nada, no repitas cotización. Contestá primero las preguntas concretas. Si identificás intención firme de avanzar, sugerí Pre-Cierre y derivación humana, nunca cierre automático.` },
-      { role: "system", content: `DATOS CONFIRMADOS DEL CRM (no inventes ni vuelvas a solicitarlos): ${JSON.stringify({ ...(quoteData || {}), weightKg: facts.weightKg, goodsValue: facts.goodsValue, cbm: facts.cbm, shippingMode: facts.shippingMode || quoteData.shippingMode })}` },
+      { role: "system", content: `DATOS CONFIRMADOS DEL CRM (no inventes ni vuelvas a solicitarlos): ${JSON.stringify({ ...(quoteData || {}), product: facts.product, weightKg: facts.weightKg, goodsValue: facts.goodsValue, cbm: facts.cbm, shippingMode: facts.shippingMode || quoteData.shippingMode })}` },
+      { role: "system", content: `CONTROL ANTES DE RESPONDER: conversación previa=${conversationHistory.length > 2}; producto=${facts.product || 'sin identificar'}; pesoKg=${facts.weightKg ?? 'faltante'}; volumenM3=${facts.cbm ?? 'faltante'}; FOB=${facts.goodsValue ?? 'faltante'}. Si hay conversación previa, jamás digas «Soy Sol» ni vuelvas a dar la bienvenida. No pidas datos que estén confirmados. Si la última entrada es un número, interpretalo como continuación de la pregunta previa. Si cambió peso o FOB después de cotizar, recalculá. No afirmes haber leído el contenido de un PDF si solo recibiste el nombre del archivo.` },
       ...conversationHistory.map(msg => ({
         role: msg.sender === 'me' ? 'assistant' : 'user',
         content: msg.text
@@ -356,7 +441,7 @@ export default async function handler(req, res) {
 
     // Nunca permitir que el modelo borre hechos confirmados.
     parsedData.extractedData = { ...(parsedData.extractedData || {}) };
-    for (const key of ['weightKg', 'goodsValue', 'cbm']) {
+    for (const key of ['product', 'weightKg', 'goodsValue', 'cbm']) {
       if (facts[key] != null) parsedData.extractedData[key] = facts[key];
     }
     if (facts.shippingMode === 'all_inclusive') {
@@ -367,6 +452,17 @@ export default async function handler(req, res) {
       // Última barrera: nunca cambiar a aéreo/marítimo por error del modelo.
       if (/OPCI[OÓ]N\s*A[EÉ]REA|OPCI[OÓ]N\s*MAR[IÍ]TIMA/i.test(reply)) {
         parsedData.replyMessage = `Seguimos con All Inclusive, cuyo precio de referencia es USD 2.335, sujeto a verificar la mercadería. ${facts.product ? '¿Querés que un asesor confirme la elegibilidad?' : '¿Qué producto querés importar?'}`;
+      }
+    }
+    // Defensa final contra saludos reiniciados y pedidos de datos que ya conocemos.
+    const lastText = String(lastClient(conversationHistory)?.text || '').trim();
+    if (conversationHistory.length > 2 && /^(?:hola|buenas|buenos d[ií]as).*?(?:soy sol|en qu[eé] te puedo ayudar|qu[eé] producto)/is.test(String(parsedData.replyMessage || ''))) {
+      if (facts.product && (facts.weightKg != null || facts.cbm != null) && facts.goodsValue != null) {
+        parsedData.replyMessage = 'Perfecto, seguimos con los datos de tu mercadería. ¿Querés revisar o actualizar la cotización?';
+      } else if (facts.product) {
+        parsedData.replyMessage = facts.weightKg == null && facts.cbm == null
+          ? `Seguimos con ${facts.product}. ¿Conocés el peso total en kg o volumen en m³?`
+          : `Seguimos con ${facts.product}. ¿Cuál es el valor FOB total de la mercadería en USD?`;
       }
     }
     return res.status(200).json(parsedData);
