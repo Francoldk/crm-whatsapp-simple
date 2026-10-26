@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Conectamos con Supabase para guardar todo de forma permanente
 const supabase = createClient(
   process.env.SUPABASE_URL || 'https://jcnsepbalxyscxrsyade.supabase.co',
   process.env.SUPABASE_KEY
@@ -13,7 +12,7 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // GET: Devolver contactos desde Supabase (por si tu UI lo usa)
+  // GET: Devolver contactos desde Supabase
   if (req.method === "GET") {
     const { data, error } = await supabase.from('contacts').select('*');
     if (error) return res.status(500).json({ error: error.message });
@@ -43,15 +42,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST: Acá es donde Render nos manda los mensajes nuevos de WhatsApp
+  // POST: Render nos manda los mensajes nuevos de WhatsApp
   if (req.method === "POST") {
-    const { phone, name, text, sender, extractedData, status } = req.body;
+    const { phone, name, text, sender, extractedData, status, mediaPath, mediaType, mediaName } = req.body;
     const cleanPhone = String(phone || '').replace(/\D/g, '');
 
     if (!cleanPhone) return res.status(400).json({ error: "Falta el número de teléfono" });
 
     try {
-      // 1. Buscamos si el contacto ya existe en tu Supabase
+      // 1. Buscamos si el contacto ya existe
       let { data: contact } = await supabase
         .from('contacts')
         .select('*')
@@ -76,7 +75,7 @@ export default async function handler(req, res) {
         if (insertErr) throw insertErr;
         contact = newContact;
       } else {
-        // 3. Si ya existe, le actualizamos la data (nombre, ficha de cotización)
+        // 3. Si ya existe, actualizamos la data
         let newQuoteData = contact.quote_data || {};
         if (extractedData && typeof extractedData === 'object') {
           const validEntries = Object.entries(extractedData).filter(([_, v]) => v !== null && v !== undefined && v !== '');
@@ -90,23 +89,27 @@ export default async function handler(req, res) {
             status: status || contact.status,
             quote_data: newQuoteData,
             last_message: text || contact.last_message,
-            updated_at: new Date().toISOString() // forzamos actualizar la fecha
+            updated_at: new Date().toISOString()
           })
           .eq('id', contact.id);
       }
 
-      // 4. Guardamos el mensaje nuevo en la tabla de messages
-      if (text) {
+      // 4. Guardamos el mensaje nuevo (con o sin media)
+      // 👇 ACÁ ESTÁ EL CAMBIO CLAVE: ahora guardamos media_path, media_type y media_name
+      if (text || mediaPath) {
         await supabase
           .from('messages')
           .insert([{
             contact_id: contact.id,
             sender: sender || 'client',
-            text: text
+            text: text || '',
+            media_path: mediaPath || null,
+            media_type: mediaType || null,
+            media_name: mediaName || null
           }]);
       }
 
-      // 5. MEMORIA ACTIVADA: Buscamos los últimos 6 mensajes de la conversación
+      // 5. Memoria: últimos 6 mensajes para Sol
       const { data: history } = await supabase
         .from('messages')
         .select('sender, text')
@@ -114,15 +117,14 @@ export default async function handler(req, res) {
         .order('created_at', { ascending: false })
         .limit(6);
 
-      // Enviamos el historial ordenado cronológicamente a Render para que Sol no pierda el hilo
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         conversation: {
           botActive: contact.bot_active,
           messages: history ? history.reverse() : []
         }
       });
-      
+
     } catch (error) {
       console.error("Error en webhook POST:", error);
       return res.status(500).json({ error: error.message });
