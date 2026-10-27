@@ -3,6 +3,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import KanbanTab from '../components/KanbanTab';
 import AsistenteIATab from '../components/AsistenteIATab';
+import RecuperacionTab from '../components/RecuperacionTab';
 
 const ESTADOS = [
   'Entrante', 'Faltan Datos', 'Cotizado', 'Pre-Cierre', 'Cliente Cerrado', 'Cliente Finalizado',
@@ -35,6 +36,7 @@ export default function CRM() {
   const isMobile = useIsMobile(900);
 
   const [activeTab, setActiveTab] = useState('chat');
+  const [recoveryDraft, setRecoveryDraft] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -104,6 +106,13 @@ export default function CRM() {
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   }, [selectedConv?.messages?.length, selectedId]);
+
+  const handleOpenRecoveryChat = (id, draft) => {
+    setSelectedId(String(id));
+    setActiveTab('chat');
+    if (typeof draft === 'string') { setInputReply(draft); setRecoveryDraft(draft); }
+    if (isMobile) setMobileView('chat');
+  };
 
   const handleSelectConv = (id) => {
     setSelectedId(String(id));
@@ -431,6 +440,7 @@ export default function CRM() {
               {!isMobile && (
                 <button onClick={(e) => handleRename(selectedConv, e)} style={styles.btnRename}>✏️</button>
               )}
+              <button title="Analizar y recuperar prospecto" onClick={() => setActiveTab('recuperacion')} style={styles.btnRename}>🎯</button>
               <button
                 onClick={() => updateContact({ botActive: !(selectedConv.botActive !== false) })}
                 style={{
@@ -736,6 +746,12 @@ export default function CRM() {
           >
             {isMobile ? '✨' : '✨ Asistente IA'}
           </button>
+          <button
+            onClick={() => setActiveTab('recuperacion')}
+            style={{ ...(activeTab === 'recuperacion' ? styles.tabActive : styles.tab), ...(isMobile ? styles.tabMobile : {}) }}
+          >
+            {isMobile ? '🎯' : '🎯 Recuperación'}
+          </button>
         </nav>
 
         <div style={styles.headerRight}>
@@ -778,6 +794,7 @@ export default function CRM() {
 
       {activeTab === 'kanban' && <KanbanTab conversations={conversations} />}
       {activeTab === 'asistente' && <AsistenteIATab />}
+      {activeTab === 'recuperacion' && <RecuperacionTab conversations={conversations} onOpenChat={handleOpenRecoveryChat} />}
     </div>
   );
 }
