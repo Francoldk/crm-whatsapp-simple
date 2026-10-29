@@ -319,13 +319,14 @@ export default function CRM() {
 
   const renderInbox = () => (
     <aside
-      className="col-inbox"
+      className="col-inbox dcam-inbox"
       style={{
         ...styles.colInboxBg,
         display: isMobile && mobileView !== 'inbox' ? 'none' : 'flex',
       }}
     >
       <div style={styles.inboxHeader}>
+        <div className="dcam-section-title"><span>💬</span><div><strong>Conversaciones</strong><small>Gestioná tus contactos en un solo lugar</small></div><b>{conversations.length}</b></div>
         <input
           type="text"
           placeholder="🔍  Buscar contactos..."
@@ -334,7 +335,7 @@ export default function CRM() {
           style={styles.searchInput}
         />
       </div>
-      <div style={styles.list}>
+      <div className="dcam-inbox-list" style={styles.list}>
         {loading && conversations.length === 0 && <div style={styles.emptyState}>Cargando...</div>}
         {!loading && filteredConversations.length === 0 && (
           <div style={styles.emptyState}>
@@ -413,7 +414,7 @@ export default function CRM() {
 
   const renderChat = () => (
     <section
-      className="col-chat"
+      className="col-chat dcam-chat"
       style={{
         ...styles.colChatBg,
         display: isMobile && mobileView !== 'chat' ? 'none' : 'flex',
@@ -421,7 +422,7 @@ export default function CRM() {
     >
       {selectedConv ? (
         <>
-          <div style={styles.chatHeader}>
+          <div className="dcam-conv-header" style={styles.chatHeader}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
               {isMobile && (
                 <button onClick={() => setMobileView('inbox')} style={styles.btnBack} aria-label="Volver">
@@ -461,7 +462,7 @@ export default function CRM() {
           </div>
 
           {/* ÁREA DE MENSAJES CORREGIDA */}
-          <div style={styles.messagesArea}>
+          <div className="dcam-messages" style={styles.messagesArea}>
             {(!selectedConv.messages || selectedConv.messages.length === 0) && (
               <div style={styles.emptyChat}>
                 <div style={{ fontSize: '44px', opacity: 0.15 }}>💬</div>
@@ -539,7 +540,7 @@ export default function CRM() {
 
   const renderForm = () => (
     <aside
-      className="col-form"
+      className="col-form dcam-quote"
       style={{
         ...styles.colFormBg,
         display: isMobile && !mobileFormOpen ? 'none' : 'flex',
@@ -551,7 +552,7 @@ export default function CRM() {
         zIndex: isMobile ? 100 : undefined,
       }}
     >
-      <div style={styles.formHeader}>
+      <div className="dcam-form-header" style={styles.formHeader}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             {isMobile && (
@@ -582,7 +583,7 @@ export default function CRM() {
           </button>
         </div>
       </div>
-      <div style={styles.formScroll}>
+      <div className="dcam-form-scroll" style={styles.formScroll}>
         <Field label="Cliente / Razón Social">
           <input
             type="text"
@@ -785,7 +786,7 @@ export default function CRM() {
       </header>
 
       {activeTab === 'chat' && (
-        <main style={styles.responsiveGrid}>
+        <main className="dcam-chat-layout" style={styles.responsiveGrid}>
           {renderInbox()}
           {renderChat()}
           {renderForm()}
@@ -821,7 +822,7 @@ const styles = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    background: 'linear-gradient(180deg, #05070d 0%, #0a0f1c 100%)',
+    background: 'linear-gradient(130deg, #060d20 0%, #070e20 55%, #090a23 100%)',
     color: '#e2e8f0',
     overflow: 'hidden',
     position: 'relative',
@@ -861,7 +862,7 @@ responsiveGrid: {
   },
   header: {
     height: '64px',
-    background: 'rgba(15,23,42,0.6)',
+    background: 'rgba(8,16,37,0.95)',
     backdropFilter: 'blur(20px)',
     borderBottom: '1px solid rgba(51,65,85,0.5)',
     display: 'flex',
@@ -968,7 +969,7 @@ responsiveGrid: {
     background: 'rgba(10,15,28,0.6)', 
     backdropFilter: 'blur(10px)', 
     flexDirection: 'column',
-    width: '340px',
+    width: 'clamp(270px,23vw,370px)',
     borderRight: '1px solid rgba(51,65,85,0.4)'
   },
 colChatBg: { 
@@ -984,7 +985,7 @@ colChatBg: {
     background: 'rgba(10,15,28,0.6)', 
     backdropFilter: 'blur(10px)', 
     flexDirection: 'column',
-    width: '400px'
+    width: 'clamp(310px,26vw,410px)'
   },
 
   inboxHeader: { padding: '14px', borderBottom: '1px solid rgba(51,65,85,0.3)', flexShrink: 0 },

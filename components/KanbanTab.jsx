@@ -71,8 +71,14 @@ export default function KanbanTab({ conversations }) {
 
   const tooltipPos = hoveredCard ? getTooltipPosition() : { left: 0, top: 0 };
 
+  const count = k => grouped[k].length;
   return (
-    <div style={styles.board}>
+    <div className="dcam-board-wrap">
+      <div className="dcam-kpi-grid">
+        {[['👥','Total de leads',conversations.length],['📃','Cotizados',count('cotizado')],['🤝','Pre-Cierre',count('pre_cierre')],['🏆','Clientes cerrados',count('cliente_cerrado')]].map(([icon,label,value])=><div className="dcam-kpi" key={label}><span className="kpi-icon">{icon}</span><div><small>{label}</small><strong>{value}</strong></div></div>)}
+      </div>
+      <div className="dcam-board-head"><div><h2>📊 Tablero comercial</h2><p>Seguimiento de prospectos por etapa</p></div><span className="dcam-muted">{conversations.length} contactos en total</span></div>
+      <div style={styles.board}>
       {COLUMNAS.map((col) => (
         <div key={col.key} style={styles.column}>
           <div style={{ ...styles.columnHeader, borderTopColor: col.color }}>
@@ -234,6 +240,7 @@ export default function KanbanTab({ conversations }) {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -250,9 +257,9 @@ const styles = {
     position: 'relative',
   },
   column: {
-    minWidth: '260px',
-    maxWidth: '280px',
-    background: 'rgba(15,23,42,0.6)',
+    minWidth: '245px',
+    maxWidth: '330px',
+    background: 'linear-gradient(180deg,#0b1731,#081326)',
     backdropFilter: 'blur(10px)',
     borderRadius: '12px',
     border: '1px solid rgba(51,65,85,0.4)',
@@ -292,8 +299,8 @@ const styles = {
     gap: '8px',
   },
   card: {
-    background: 'rgba(30,41,59,0.7)',
-    border: '1px solid rgba(51,65,85,0.5)',
+    background: 'linear-gradient(145deg,#172744,#101b35)',
+    border: '1px solid #2d4169',
     borderRadius: '10px',
     padding: '12px',
     cursor: 'pointer',
