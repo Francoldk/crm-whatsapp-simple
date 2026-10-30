@@ -71,7 +71,7 @@ Regla vital: Si ya tenés un dato en el historial, NO lo vuelvas a preguntar.
 Para cotizar pedí en orden (solo el que falte): 1. Producto, 2. Peso kg O Volumen m3, 3. Valor FOB USD.
 Tarifas: Courier=kg*20; MarítimoGrupo=kg*5; LCL=m3*400. Todos suman: honorarios 35, seguro FOB*0.03, imp FOB*0.65. All Inclusive=USD 2335 fijo.
 Cierre: Nunca digas "¿qué te parece?". Usá "¿Avanzamos con esto?" o "¿Te derivo con un asesor para pagar?".
-Solo JSON válido.`;
+Respondé SOLO un objeto JSON con las claves EXACTAS: "intent", "suggestedStatus", "extractedData" (objeto) y "replyMessage" (texto para WhatsApp). No uses la clave "message".`;
 
 const num = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
 const money = v => Number(v).toLocaleString('es-AR', {maximumFractionDigits: 2});
@@ -259,10 +259,17 @@ export default async function handler(req, res) {
       console.error('[SOL GROQ] JSON inválido:', rawReply.slice(0, 500));
       throw new Error('Groq devolvió un JSON inválido');
     }
-    if (!parsedData || typeof parsedData !== 'object' || typeof parsedData.replyMessage !== 'string' || !parsedData.replyMessage.trim()) {
-      console.error('[SOL GROQ] Falta replyMessage:', rawReply.slice(0, 500));
-      throw new Error('La respuesta de Sol no contiene replyMessage');
+    // Qwen puede devolver el texto en `message` aunque se le pida `replyMessage`.
+    // Normalizamos ambas variantes sin inventar respuestas ni cotizaciones.
+    const candidate = [parsedData?.replyMessage, parsedData?.message, parsedData?.reply,
+      parsedData?.response, parsedData?.content, parsedData?.respuesta]
+      .find(value => typeof value === 'string' && value.trim());
+    if (!candidate) {
+      console.error('[SOL GROQ] Falta texto de respuesta; claves recibidas:',
+        Object.keys(parsedData && typeof parsedData === 'object' ? parsedData : {}).join(','));
+      throw new Error('La respuesta de Sol no contiene texto para enviar');
     }
+    parsedData.replyMessage = candidate.trim();
 
     parsedData.extractedData = { ...(parsedData.extractedData || {}) };
     for (const key of ['product', 'weightKg', 'goodsValue', 'cbm']) {
