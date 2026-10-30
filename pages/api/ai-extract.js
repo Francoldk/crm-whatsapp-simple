@@ -217,13 +217,11 @@ export default async function handler(req, res) {
         "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
+     body: JSON.stringify({
         model: "qwen-2.5-32b",
         messages: messages,
         temperature: 0.3, 
-        max_completion_tokens: 850,
-        reasoning_effort: "none",
-        reasoning_format: "hidden",
+        max_tokens: 850,
         response_format: { type: "json_object" } 
       })
     });
