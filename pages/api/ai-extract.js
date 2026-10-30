@@ -222,21 +222,47 @@ export default async function handler(req, res) {
         messages: messages,
         temperature: 0.3, 
         max_completion_tokens: 850,
+        reasoning_effort: "none",
+        reasoning_format: "hidden",
         response_format: { type: "json_object" } 
       })
     });
 
     if (!response.ok) {
+      const rawGroqError = await response.text().catch(() => '');
+      let groqDetail = rawGroqError;
+      try {
+        const parsedError = JSON.parse(rawGroqError);
+        groqDetail = parsedError?.error?.message || parsedError?.message || rawGroqError;
+      } catch (_) {}
+      console.error(`[SOL GROQ] HTTP ${response.status}: ${String(groqDetail).slice(0, 1200)}`);
       if (response.status === 429) {
         const wait = Math.max(10, Math.min(120, Math.ceil(Number(response.headers.get('retry-after')) || 30)));
         res.setHeader('Retry-After', String(wait));
         return res.status(429).json({ error: 'Límite de Groq', retryAfter: wait });
       }
-      throw new Error(`Falla en Groq (${response.status})`);
+      return res.status(response.status >= 500 ? 502 : 500).json({
+        error: `Groq rechazó la solicitud (HTTP ${response.status}). Revisá los logs de Vercel.`,
+      });
     }
 
     const data = await response.json();
-    const parsedData = JSON.parse(data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim());
+    const rawReply = data?.choices?.[0]?.message?.content;
+    if (!rawReply || typeof rawReply !== 'string') {
+      console.error('[SOL GROQ] Respuesta sin contenido:', JSON.stringify(data?.choices?.[0] || {}).slice(0, 600));
+      throw new Error('Groq devolvió una respuesta vacía');
+    }
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawReply.replace(/```json/g, '').replace(/```/g, '').trim());
+    } catch (parseError) {
+      console.error('[SOL GROQ] JSON inválido:', rawReply.slice(0, 500));
+      throw new Error('Groq devolvió un JSON inválido');
+    }
+    if (!parsedData || typeof parsedData !== 'object' || typeof parsedData.replyMessage !== 'string' || !parsedData.replyMessage.trim()) {
+      console.error('[SOL GROQ] Falta replyMessage:', rawReply.slice(0, 500));
+      throw new Error('La respuesta de Sol no contiene replyMessage');
+    }
 
     parsedData.extractedData = { ...(parsedData.extractedData || {}) };
     for (const key of ['product', 'weightKg', 'goodsValue', 'cbm']) {
