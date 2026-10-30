@@ -69,34 +69,51 @@ RESPUESTA TÉCNICA OBLIGATORIA (Solo JSON)
 const SOL_COMPACT_PROMPT = `Sos SOL, asesora comercial y closer de DE CHINA AL MUNDO. Español argentino, cálida pero enfocada en cerrar. Mensajes cortos, ideales para WhatsApp. UNA pregunta por mensaje.
 Regla vital: Si ya tenés un dato en el historial, NO lo vuelvas a preguntar. 
 Para cotizar pedí en orden (solo el que falte): 1. Producto, 2. Peso kg O Volumen m3, 3. Valor FOB USD.
-Tarifas: Courier=kg*20; MarítimoGrupo=kg*5; LCL=m3*400. Todos suman: honorarios 35, seguro FOB*0.03, imp FOB*0.65. All Inclusive=USD 2335 fijo.
-Cierre: Nunca digas "¿qué te parece?". Usá "¿Avanzamos con esto?" o "¿Te derivo con un asesor para pagar?".
+Tarifas: Courier=kg*20; MarítimoGrupo=kg*5; LCL=m3*400. Todos suman: honorarios 35, seguro FOB*0.03, imp FOB*0.65. All Inclusive=USD 2335 fijo (NUNCA ofrecer All Inclusive para cargas menores a 45 kg; en cargas chicas ofrecé siempre Aéreo Courier y Marítimo Grupo).
+Si en el ESTADO ya vienen las cuentas hechas en "calculoOficial", usá EXACTAMENTE esos números para armar el presupuesto, no inventes cuentas ni repitas un mensaje anterior.
+Cierre: Nunca digas "¿qué te parece?". Usá "¿Avanzamos con esto?" o "¿Con cuál de las dos opciones avanzamos para reservar tu lugar?".
 Respondé SOLO un objeto JSON con las claves EXACTAS: "intent", "suggestedStatus", "extractedData" (objeto) y "replyMessage" (texto para WhatsApp). No uses la clave "message".`;
 
 const num = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
 const money = v => Number(v).toLocaleString('es-AR', {maximumFractionDigits: 2});
 const allRx = /all\s*[- ]?inclusive|all\s*in\b/i;
-const airRx = /\b(?:a[eé]re[oa]|courier)\b/i;
-const seaRx = /\b(?:mar[ií]tim[oa]|lcl|importa en grupo)\b/i;
+const airRx = /\b(?:a[eé]re[oa]|courier|lo\s+m[aá]s\s+r[aá]pido|r[aá]pido|urgente|avi[oó]n)\b/i;
+const seaRx = /\b(?:mar[ií]tim[oa]|lcl|importa en grupo|barco)\b/i;
 const getValue = v => Number(String(v).replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
 
-// Se simplificó para priorizar lo que ya extrajo el LLM antes (savedProduct) y evitar la amnesia
+// Detecta el producto tanto en frases largas como en respuestas cortas cuando Sol lo acaba de preguntar
 function productFromHistory(history, savedProduct) {
   if (savedProduct && savedProduct.trim() !== '') return savedProduct.trim();
   
   let product = null;
+  let askedProduct = false;
+
   for (const m of history) {
-    if (m.sender === 'me') continue;
     const t = String(m.text || '').trim();
-    const named = t.match(/(?:quiero|necesito|voy a|deseo|busco|importar|traer|cotizar)\s+(?:importar|traer|cotizar|unos?|unas?|el|la|los|las|de)?\s*([\p{L}][\p{L}\s-]{2,45})/iu);
-    if (!product && named && !/^(?:saber|consultar|una cotizaci[oó]n|un presupuesto|precio|informaci[oó]n|cu[aá]nto)/i.test(named[1])) {
-      product = named[1].replace(/[.!?].*$/, '').trim();
+    if (!t) continue;
+
+    if (m.sender === 'me') {
+      askedProduct = /(?:qu[eé]\s+(?:producto|mercader[ií]a|art[ií]culo)|qu[eé]\s+(?:vas\s+a|quer[eé]s)\s+(?:traer|importar)|decime\s+el\s+producto)/i.test(t);
+      continue;
     }
+
+    const named = t.match(/(?:quiero|necesito|voy a|deseo|busco|importar|traer|cotizar|comprar)\s+(?:importar|traer|cotizar|comprar|unos?|unas?|el|la|los|las|este|esta|de)?\s*([\p{L}][\p{L}\s-]{2,45})/iu);
+    if (!product && named && !/^(?:saber|consultar|una cotizaci[oó]n|un presupuesto|precio|informaci[oó]n|cu[aá]nto|producto|mercader[ií]a)/i.test(named[1])) {
+      product = named[1].replace(/[.!?].*$/, '').trim();
+    } else if (!product && askedProduct) {
+      const clean = t.replace(/^[¡!¿?\s.,-]+|[¡!¿?\s.,-]+$/g, '').trim();
+      const isNoise = /^(?:hola|buenas|buen\s+d[ií]a|s[ií]|no|ok|dale|gracias|quiero\s+informaci[oó]n|lo\s+m[aá]s\s+r[aá]pido|a[eé]reo|mar[ií]timo|courier|all\s*inclusive)/i.test(clean);
+      const hasNumbers = /\d/.test(clean);
+      if (clean.length >= 3 && clean.length <= 45 && !isNoise && !hasNumbers) {
+        product = clean;
+      }
+    }
+    askedProduct = false;
   }
   return product;
 }
 
-// Se prioriza el estado guardado (saved) para que no borre variables confirmadas
+// Prioriza datos guardados, corrige lectura de FOB inverso (ej: "900 USD") y evita que Sol active All Inclusive sola
 function factsFromHistory(history, saved = {}) {
   const facts = {
     weightKg: num(saved.weightKg),
@@ -112,24 +129,38 @@ function factsFromHistory(history, saved = {}) {
     if (!t) continue;
     
     if (m.sender === 'me') {
-      if (allRx.test(t) && /2[.,]?335|2335|cotizaci[oó]n|precio/i.test(t)) facts.shippingMode = 'all_inclusive';
+      // CORRECCIÓN: Sol NUNCA activa 'all_inclusive' leyéndose a sí misma.
       if (/valor\s*(?:fob|total)?|(?:cu[aá]nto|qu[eé])\s*(?:pag[aá]s?|vale|cuesta)|compra/i.test(t)) pending = 'goodsValue';
       else if (/metros?\s*c[uú]bicos?|\bm[³3]\b|\bcbm\b/i.test(t)) pending = 'cbm';
       else if (/peso|kilos?|\bkg\b/i.test(t)) pending = 'weightKg';
       continue;
     }
     
-    if (allRx.test(t)) facts.shippingMode = 'all_inclusive';
-    else if ((airRx.test(t) || seaRx.test(t)) && /(?:quiero|prefiero|eleg[ií]|cambiar|cotiz|opci[oó]n|solo|solamente)/i.test(t)) {
-      facts.shippingMode = airRx.test(t) && !seaRx.test(t) ? 'aereo' : 'maritimo';
+    // Si el cliente rechaza por caro o menciona 2335 sorprendido, salimos de all_inclusive
+    const complainingPrice = /(?:car[ií]simo|muy\s+caro|por\s+qu[eé]\s+tan\s+caro|ni\s+loco|no\s+es\s+rentable|2[.,]?335\s*por)/i.test(t);
+    if (complainingPrice && facts.shippingMode === 'all_inclusive') {
+      facts.shippingMode = null;
+    } else if (allRx.test(t) && !complainingPrice) {
+      facts.shippingMode = 'all_inclusive';
+    } else if (airRx.test(t) && !seaRx.test(t)) {
+      facts.shippingMode = 'aereo';
+    } else if (seaRx.test(t) && !airRx.test(t)) {
+      facts.shippingMode = 'maritimo';
     }
     
     const wt = t.match(/(\d[\d.,]*)\s*(?:kg\b|kilos?\b|kilogramos?\b)/i);
-    const fob = t.match(/(?:usd|u\$s|us\$|d[oó]lares?|fob)\s*[:$]?\s*(\d[\d.,]*)/i) || t.match(/\$\s*(\d[\d.,]*)/);
+    
+    // Lee tanto "USD 900" como "900 USD" o "precio 900" (evitando confundir "55 usd por kilo" con el FOB)
+    const isRatePerKg = /(?:por|\/)\s*(?:kg|kilo)/i.test(t);
+    const fobPrefix = t.match(/(?:usd|u\$s|us\$|d[oó]lares?|fob|precio|valor)\s*[:$]?\s*(\d[\d.,]*)/i);
+    const fobSuffix = t.match(/(\d[\d.,]*)\s*(?:usd|u\$s|us\$|d[oó]lares?|\bfob\b)/i);
+    const fobSymbol = t.match(/\$\s*(\d[\d.,]*)/);
+    const fobMatch = fobPrefix || (!isRatePerKg ? fobSuffix : null) || (!isRatePerKg ? fobSymbol : null);
+    
     const volume = t.match(/(\d[\d.,]*)\s*(?:m[³3](?!\w)|cbm\b|metros?\s*c[uú]bicos?)/i);
     
     if (wt && num(getValue(wt[1]))) facts.weightKg = getValue(wt[1]);
-    if (fob && num(getValue(fob[1]))) facts.goodsValue = getValue(fob[1]);
+    if (fobMatch && num(getValue(fobMatch[1]))) facts.goodsValue = getValue(fobMatch[1]);
     if (volume && num(getValue(volume[1]))) facts.cbm = getValue(volume[1]);
     
     if (/^\s*\d[\d.,]*\s*$/.test(t)) {
@@ -140,14 +171,56 @@ function factsFromHistory(history, saved = {}) {
     }
     pending = null;
   }
+
+  // REGLA COMERCIAL: Si pesa menos de 45 kg (y no supera 0.3 m3), jamás aplicar All Inclusive de USD 2.335
+  if (facts.shippingMode === 'all_inclusive' && facts.weightKg != null && facts.weightKg < 45 && !(facts.cbm != null && facts.cbm >= 0.3)) {
+    facts.shippingMode = 'aereo';
+  }
+
   return facts;
+}
+
+// Calcula las tarifas exactas en el servidor para que Sol no invente ni se trabe
+function buildStandardCalculations(facts) {
+  const fob = facts.goodsValue;
+  const kg = facts.weightKg;
+  const cbm = facts.cbm;
+  if (fob == null || (kg == null && cbm == null)) return null;
+
+  const hon = 35;
+  const seg = Math.round(fob * 0.03 * 100) / 100;
+  const imp = Math.round(fob * 0.65 * 100) / 100;
+  const result = { fobUSD: fob, honorariosUSD: hon, seguroUSD: seg, impuestosEstUSD: imp };
+
+  if (kg != null) {
+    const fleteCourier = Math.round(kg * 20 * 100) / 100;
+    const totalCourier = Math.round((fleteCourier + hon + seg + imp) * 100) / 100;
+    const fleteGrupo = Math.round(kg * 5 * 100) / 100;
+    const totalGrupo = Math.round((fleteGrupo + hon + seg + imp) * 100) / 100;
+
+    result.aereoCourier = { fleteUSD: fleteCourier, totalLogisticaEImpuestosUSD: totalCourier };
+    result.maritimoImportaEnGrupo = { fleteUSD: fleteGrupo, totalLogisticaEImpuestosUSD: totalGrupo };
+  }
+  if (cbm != null) {
+    const fleteLCL = Math.round(cbm * 400 * 100) / 100;
+    const totalLCL = Math.round((fleteLCL + hon + seg + imp) * 100) / 100;
+    result.maritimoLCL = { fleteUSD: fleteLCL, totalLogisticaEImpuestosUSD: totalLCL };
+  }
+  return result;
 }
 
 function allInclusiveResponse(history, facts) {
   if (facts.shippingMode !== 'all_inclusive') return null;
+  if (facts.weightKg != null && facts.weightKg < 45) return null;
+
   const clients = history.filter(m => m.sender !== 'me');
   const last = String(clients.at(-1)?.text || '').trim();
   if (!last || !facts.product) return null;
+  if (/(?:car[ií]simo|muy\s+caro|por\s+qu[eé]\s+tan\s+caro|ni\s+loco|no\s+gracias)/i.test(last)) return null;
+
+  // Si ya se envió la plantilla de COTIZACIÓN ALL INCLUSIVE antes, no volver a repetirla como robot
+  const alreadySentAllIn = history.some(m => m.sender === 'me' && /COTIZACI[OÓ]N\s+ALL\s+INCLUSIVE/i.test(String(m.text || '')));
+  if (alreadySentAllIn) return null;
   
   const explicitlyAskingPrice = /(?:cotiz|presupuest|precio|cu[aá]nto\s*(?:sale|cuesta))/i.test(last);
   const mentionsAll = allRx.test(last);
@@ -185,17 +258,16 @@ export default async function handler(req, res) {
     }
 
     const facts = factsFromHistory(conversationHistory, quoteData);
-    
-    // Se eliminó 'deterministicAnswer' para que el LLM procese la conversación y fluya naturalmente.
+    const calculoOficial = buildStandardCalculations(facts);
     
     const guard = (!imageBase64 && !imagesBase64?.length && !documentText) ? allInclusiveResponse(conversationHistory, facts) : null;
     if (guard) return res.status(200).json(guard);
 
     const lastClientMessage = [...conversationHistory].reverse().find(m => m.sender !== 'me');
-    const previousQuotes = conversationHistory.filter(m => m.sender === 'me' && /cotizaci[oó]n|total estimado|precio de referencia|presupuesto/i.test(String(m.text || '')));
+    const previousQuotes = conversationHistory.filter(m => m.sender === 'me' && /cotizaci[oó]n|total estimado|precio de referencia|presupuesto|a[eé]reo courier/i.test(String(m.text || '')));
     const currentStage = !facts.product ? 'IDENTIFICAR PRODUCTO' :
       (facts.weightKg == null && facts.cbm == null) ? 'PEDIR PESO O VOLUMEN' :
-      facts.goodsValue == null ? 'PEDIR FOB' : 'CERRAR VENTA';
+      facts.goodsValue == null ? 'PEDIR FOB' : 'COTIZAR Y CERRAR VENTA';
       
     const shortHistory = conversationHistory.slice(-10).map(msg => ({
       role: msg.sender === 'me' ? 'assistant' : 'user',
@@ -206,7 +278,8 @@ export default async function handler(req, res) {
       { role: 'system', content: SOL_COMPACT_PROMPT },
       { role: 'system', content: `ESTADO: ${JSON.stringify({
         product: facts.product, weightKg: facts.weightKg, cbm: facts.cbm,
-        goodsValue: facts.goodsValue, shippingMode: facts.shippingMode
+        goodsValue: facts.goodsValue, shippingMode: facts.shippingMode,
+        calculoOficial
       })}. Etapa: ${currentStage}. ¿Ya se cotizó?: ${previousQuotes.length > 0}. Último msj: ${JSON.stringify(lastClientMessage?.text || '')}. Hacé UNA SOLA PREGUNTA. Sé cerradora.` },
       ...shortHistory
     ];
@@ -300,6 +373,8 @@ export default async function handler(req, res) {
       if (/OPCI[OÓ]N\s*A[EÉ]REA|OPCI[OÓ]N\s*MAR[IÍ]TIMA/i.test(String(parsedData.replyMessage || ''))) {
         parsedData.replyMessage = `Seguimos con All Inclusive (referencia USD 2.335). ${facts.product ? '¿Avanzamos con un asesor para validar la carga?' : '¿Qué producto querés importar?'}`;
       }
+    } else if (facts.shippingMode) {
+      parsedData.extractedData.shippingMode = facts.shippingMode;
     }
 
     return res.status(200).json(parsedData);
