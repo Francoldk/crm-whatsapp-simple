@@ -40,8 +40,9 @@ export default async function handler(req, res) {
           mediaId: m.media_path ? m.id : null,
           mediaType: m.media_type || null,
           mediaName: m.media_name || null,
+          createdAt: m.created_at, // Guardamos la fecha real para ordenar bien
           time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' }) : ''
-        })).sort((a, b) => a.id - b.id)
+        })).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)) // 🕒 ORDEN CRONOLÓGICO REAL POR FECHA
       }));
 
       return res.status(200).json(formatted);
