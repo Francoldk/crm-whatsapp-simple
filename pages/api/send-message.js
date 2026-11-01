@@ -1,30 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://jcnsepbalxyscxrsyade.supabase.co',
-  process.env.SUPABASE_KEY
-);
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  const { phone, jid, message, contactId } = req.body;
+  const { phone, jid, message } = req.body || {};
 
   if ((!phone && !jid) || !message) {
     return res.status(400).json({ error: 'Faltan parámetros' });
   }
 
   try {
-    // 1. Guardar en Supabase para el CRM
-    if (contactId) {
-      await supabase.from('messages').insert([{
-        contact_id: contactId,
-        sender: 'me',
-        text: message
-      }]);
-    }
+    // El webhook whatsapp-webhook.js guarda el mensaje confirmado por Render.
+    // No insertarlo también aquí: eso generaba dos filas para un solo envío.
 
     // 2. CRÍTICO: Usar el JID exacto que mandó el CRM. Si no hay, armamos uno de emergencia.
     const targetJid = jid || (phone.includes('@') ? phone : `${phone.replace(/\D/g, '')}@s.whatsapp.net`);
