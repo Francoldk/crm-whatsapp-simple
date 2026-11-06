@@ -1,3 +1,7 @@
+export const config = {
+  runtime: 'edge',
+};
+
 import { askGemini } from '../../lib/gemini';
 
 export default async function handler(req, res) {
