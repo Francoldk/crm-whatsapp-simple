@@ -1,0 +1,3 @@
+export const production = {"NEXT_PUBLIC_SUPABASE_URL":"https://jcnsepbalxyscxrsyade.supabase.co/rest/v1/","NEXT_PUBLIC_SUPABASE_ANON_KEY":"sb_publishable_kVLvltX-K4yGF2VRPaGDaA_KBkmT78W"};
+export const development = {"NEXT_PUBLIC_SUPABASE_URL":"https://jcnsepbalxyscxrsyade.supabase.co/rest/v1/","NEXT_PUBLIC_SUPABASE_ANON_KEY":"sb_publishable_kVLvltX-K4yGF2VRPaGDaA_KBkmT78W"};
+export const test = {};

@@ -1,6 +1,3 @@
-export const config = {
-  runtime: 'edge',
-};
 // pages/api/whatsapp.js
 export default function handler(req, res) {
   if (req.method === 'GET') {

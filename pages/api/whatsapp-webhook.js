@@ -1,7 +1,3 @@
-export const config = {
-  runtime: 'edge',
-};
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
