@@ -7452,6 +7452,27 @@
       ],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/pages/api/whatsapp-webhook.js": {
+      "bytes": 3698,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/pages-api.runtime.prod.js",
+          "kind": "require-call",
+          "original": "next/dist/compiled/next-server/pages-api.runtime.prod.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/@supabase/supabase-js/dist/index.mjs",
+          "kind": "dynamic-import",
+          "original": "@supabase/supabase-js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/webpack-api-runtime.js",
+          "kind": "require-call",
+          "original": "../../webpack-api-runtime.js"
+        }
+      ],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js": {
       "bytes": 6675,
       "imports": [
@@ -7479,27 +7500,6 @@
           "path": ".open-next/server-functions/default/node_modules/bcryptjs/index.js",
           "kind": "dynamic-import",
           "original": "bcryptjs"
-        },
-        {
-          "path": ".open-next/server-functions/default/.next/server/webpack-api-runtime.js",
-          "kind": "require-call",
-          "original": "../../webpack-api-runtime.js"
-        }
-      ],
-      "format": "cjs"
-    },
-    ".open-next/server-functions/default/.next/server/pages/api/whatsapp-webhook.js": {
-      "bytes": 3698,
-      "imports": [
-        {
-          "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/pages-api.runtime.prod.js",
-          "kind": "require-call",
-          "original": "next/dist/compiled/next-server/pages-api.runtime.prod.js"
-        },
-        {
-          "path": ".open-next/server-functions/default/node_modules/@supabase/supabase-js/dist/index.mjs",
-          "kind": "dynamic-import",
-          "original": "@supabase/supabase-js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/webpack-api-runtime.js",
@@ -7726,6 +7726,22 @@
       ],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/pages/api/whatsapp.js": {
+      "bytes": 1620,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/pages-api.runtime.prod.js",
+          "kind": "require-call",
+          "original": "next/dist/compiled/next-server/pages-api.runtime.prod.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/webpack-api-runtime.js",
+          "kind": "require-call",
+          "original": "../../webpack-api-runtime.js"
+        }
+      ],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/pages/api/messages.js": {
       "bytes": 2213,
       "imports": [
@@ -7738,22 +7754,6 @@
           "path": ".open-next/server-functions/default/node_modules/@supabase/supabase-js/dist/index.mjs",
           "kind": "dynamic-import",
           "original": "@supabase/supabase-js"
-        },
-        {
-          "path": ".open-next/server-functions/default/.next/server/webpack-api-runtime.js",
-          "kind": "require-call",
-          "original": "../../webpack-api-runtime.js"
-        }
-      ],
-      "format": "cjs"
-    },
-    ".open-next/server-functions/default/.next/server/pages/api/whatsapp.js": {
-      "bytes": 1620,
-      "imports": [
-        {
-          "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/pages-api.runtime.prod.js",
-          "kind": "require-call",
-          "original": "next/dist/compiled/next-server/pages-api.runtime.prod.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/webpack-api-runtime.js",
@@ -8378,14 +8378,14 @@
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\auth\\[...nextauth].js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js",
-          "kind": "require-call",
-          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\recovery-analyze.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/pages/api/whatsapp-webhook.js",
           "kind": "require-call",
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\whatsapp-webhook.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\recovery-analyze.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/pages/api/conversations.js",
@@ -8423,14 +8423,14 @@
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\ai-extract.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/pages/api/messages.js",
-          "kind": "require-call",
-          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\messages.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/pages/api/whatsapp.js",
           "kind": "require-call",
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\whatsapp.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/pages/api/messages.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\messages.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/pages/api/gemini.js",
@@ -8840,14 +8840,14 @@
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\auth\\[...nextauth].js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js",
-          "kind": "require-call",
-          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\recovery-analyze.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/pages/api/whatsapp-webhook.js",
           "kind": "require-call",
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\whatsapp-webhook.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\recovery-analyze.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/pages/api/conversations.js",
@@ -8885,14 +8885,14 @@
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\ai-extract.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/pages/api/messages.js",
-          "kind": "require-call",
-          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\messages.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/pages/api/whatsapp.js",
           "kind": "require-call",
           "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\whatsapp.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/pages/api/messages.js",
+          "kind": "require-call",
+          "original": "C:\\Users\\franc\\crm-whatsapp-simple\\.open-next\\server-functions\\default\\.next\\server\\pages\\api\\messages.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/pages/api/gemini.js",
@@ -11425,11 +11425,11 @@
         ".open-next/server-functions/default/.next/server/pages/api/auth/[...nextauth].js": {
           "bytesInOutput": 3282
         },
-        ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js": {
-          "bytesInOutput": 7013
-        },
         ".open-next/server-functions/default/.next/server/pages/api/whatsapp-webhook.js": {
           "bytesInOutput": 3994
+        },
+        ".open-next/server-functions/default/.next/server/pages/api/recovery-analyze.js": {
+          "bytesInOutput": 7013
         },
         ".open-next/server-functions/default/.next/server/pages/api/conversations.js": {
           "bytesInOutput": 5241
@@ -11452,11 +11452,11 @@
         ".open-next/server-functions/default/.next/server/pages/api/ai-extract.js": {
           "bytesInOutput": 16384
         },
-        ".open-next/server-functions/default/.next/server/pages/api/messages.js": {
-          "bytesInOutput": 2414
-        },
         ".open-next/server-functions/default/.next/server/pages/api/whatsapp.js": {
           "bytesInOutput": 1793
+        },
+        ".open-next/server-functions/default/.next/server/pages/api/messages.js": {
+          "bytesInOutput": 2414
         },
         ".open-next/server-functions/default/.next/server/pages/api/gemini.js": {
           "bytesInOutput": 3948
