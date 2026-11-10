@@ -32,7 +32,7 @@ El menú incluye las instrucciones para agregar el ícono y cerrar sesión.
 - Respuesta de texto por WhatsApp desde el mismo chat, con botón Enviar, borradores en memoria por conversación y protección contra doble toque.
 - Ficha del cliente, producto, peso, volumen, FOB, cotización y notas registradas.
 - Enlaces para abrir imágenes, documentos y otros adjuntos autorizados por el CRM.
-- Reproductor para audios cuyo formato soporte iOS. Los audios Ogg/Opus de WhatsApp pueden no reproducirse en iOS 9; la app no convierte formatos.
+- Reproductor MP3 para iPad: las notas Ogg/Opus se convierten en el servidor al reproducirlas y se conserva el original. Requiere publicar el conversor en el repositorio de WhatsApp; ver `AUDIO-IPAD.md`.
 - Actualización cada 30 segundos cuando está abierta y visible, y botón de actualización manual.
 
 Permite consultar el CRM y responder mensajes de texto. Los cambios en clientes, cotizaciones, SOL y usuarios se realizan desde el CRM completo.
